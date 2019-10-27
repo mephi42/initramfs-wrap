@@ -1,0 +1,120 @@
+#!/usr/bin/env python3
+import argparse
+from glob import glob
+import logging
+import os
+import shutil
+import subprocess
+
+DEB2QEMU = {
+    'arm64': 'aarch64',
+}
+
+
+def get_qemu_arch(arch):
+    return DEB2QEMU.get(arch, arch)
+
+
+def get_chroot(arch):
+    return os.path.join(os.getcwd(), f'debootstrap-{arch}')
+
+
+def get_chroot_state(arch):
+    return os.path.join(get_chroot(arch), 'fakeroot-state')
+
+
+def get_binfmt_misc_interpreter(arch):
+    with open(f'/proc/sys/fs/binfmt_misc/qemu-{get_qemu_arch(arch)}') as fp:
+        for line in fp:
+            if line.startswith('interpreter '):
+                return line[12:-1]
+    raise Exception('/proc/sys/fs/binfmt_misc is not configured')
+
+
+def extract_deb(arch, deb):
+    archives = os.path.join(
+        get_chroot(arch), 'var', 'cache', 'apt', 'archives')
+    deb_path, = glob(os.path.join(archives, f'{deb}_*.deb'))
+    subprocess.check_call(['dpkg', '-x', deb_path, get_chroot(arch)])
+
+
+def fixup_fakechroot(arch):
+    with open(os.path.join(f'{get_chroot(arch)}/bin/fakechroot'), 'r+') as fp:
+        content = fp.read()
+        fp.truncate(0)
+        fp.write(content.replace(
+            'FAKECHROOT_DETECT=1 /bin/echo',
+            'FAKECHROOT_DETECT=1 sh -c :'))
+
+
+def debootstrap1(arch):
+    cache = os.path.expanduser('~/.cache/initramfs-wrap/debootstrap')
+    os.makedirs(cache, exist_ok=True)
+    packages = ','.join((
+        'fakechroot',
+        'fakeroot',
+        'gdb',
+        'iproute2',
+        'procps',
+        'screen',
+        'strace',
+        'valgrind',
+        'vim',
+    ))
+    subprocess.check_call([
+        'fakechroot',
+        'fakeroot',
+        '-s', get_chroot_state(arch),
+        'debootstrap',
+        f'--cache-dir={cache}',
+        '--foreign',
+        f'--arch={arch}',
+        '--variant=fakechroot',
+        f'--include={packages}',
+        'testing',
+        get_chroot(arch),
+    ])
+    qemu_path = get_binfmt_misc_interpreter(arch)
+    shutil.copy(qemu_path, f'debootstrap-{arch}' + qemu_path)
+    for package in ('libfakeroot', 'fakeroot', 'libfakechroot', 'fakechroot'):
+        extract_deb(arch, package)
+    fixup_fakechroot(arch)
+
+
+def debootstrap2(arch):
+    chroot = get_chroot(arch)
+    env_path = os.environ['PATH']
+    fakechroot = f'{chroot}/bin/fakechroot'
+    libfakechroot, = glob(f'{chroot}/usr/lib/*/fakechroot/libfakechroot.so')
+    subprocess.check_call([
+        'env',
+        f'QEMU_LD_PREFIX={chroot}',
+        f'PATH={chroot}/sbin:{chroot}/bin:{env_path}',
+        'sh',
+        fakechroot,
+        '-l', libfakechroot,
+        'chroot',
+        chroot,
+        'fakeroot-sysv',
+        '-i', '/fakeroot-state',
+        '-s', '/fakeroot-state',
+        '/debootstrap/debootstrap', '--second-stage',
+    ])
+    shutil.rmtree(f'{chroot}/var/cache/apt/archives')
+    shutil.rmtree(f'{chroot}/var/lib/apt/lists')
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-a', required=True)
+    parser.add_argument('-i', required=True)
+    parser.add_argument('-o', required=True)
+    parser.add_argument('-s')
+    parser.add_argument('-v', action='store_true')
+    args = parser.parse_args()
+    if args.v:
+        logging.basicConfig(level=logging.DEBUG)
+    if args.s is None or args.s == 'debootstrap1':
+        debootstrap1(args.a)
+    if args.s is None or args.s == 'debootstrap2':
+        debootstrap2(args.a)

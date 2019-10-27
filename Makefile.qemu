@@ -1,0 +1,23 @@
+VERSION=4.1.0
+CONFIGURE_FLAGS=\
+		--prefix=$(PWD)/qemu-$(VERSION) \
+		--disable-system \
+		--disable-tools \
+		--static \
+		--enable-debug-info
+
+all: qemu-$(VERSION)/bin/qemu-x86_64-static
+
+qemu-$(VERSION)/bin/qemu-x86_64-static: qemu-$(VERSION)/config.status
+		rm -rf qemu-$(VERSION)/bin
+		cd qemu-$(VERSION) && $(MAKE) && $(MAKE) install
+		for q in qemu-$(VERSION)/bin/qemu-*; do mv $$q $$q-static; done
+
+qemu-$(VERSION)/config.status: qemu-$(VERSION)/configure
+		cd qemu-$(VERSION) && ./configure $(CONFIGURE_FLAGS)
+
+qemu-$(VERSION)/configure: qemu-$(VERSION).tar.xz
+		tar -xJmf qemu-$(VERSION).tar.xz
+
+qemu-$(VERSION).tar.xz:
+		curl -o qemu-$(VERSION).tar.xz https://download.qemu.org/qemu-$(VERSION).tar.xz
