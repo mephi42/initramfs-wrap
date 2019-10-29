@@ -38,15 +38,6 @@ def extract_deb(arch, deb):
     subprocess.check_call(['dpkg', '-x', deb_path, get_chroot(arch)])
 
 
-def fixup_fakechroot(arch):
-    with open(os.path.join(f'{get_chroot(arch)}/bin/fakechroot'), 'r+') as fp:
-        content = fp.read()
-        fp.truncate(0)
-        fp.write(content.replace(
-            'FAKECHROOT_DETECT=1 /bin/echo',
-            'FAKECHROOT_DETECT=1 sh -c :'))
-
-
 def debootstrap1(arch):
     cache = os.path.expanduser('~/.cache/initramfs-wrap/debootstrap')
     os.makedirs(cache, exist_ok=True)
@@ -74,11 +65,25 @@ def debootstrap1(arch):
         'testing',
         get_chroot(arch),
     ])
+
+
+def copy_qemu_user_static(arch):
     qemu_path = get_binfmt_misc_interpreter(arch)
     shutil.copy(qemu_path, f'debootstrap-{arch}' + qemu_path)
+
+
+def extract_bootstrapping_tools(arch):
     for package in ('libfakeroot', 'fakeroot', 'libfakechroot', 'fakechroot'):
         extract_deb(arch, package)
-    fixup_fakechroot(arch)
+
+
+def fixup_fakechroot(arch):
+    with open(os.path.join(f'{get_chroot(arch)}/bin/fakechroot'), 'r+') as fp:
+        content = fp.read()
+        fp.truncate(0)
+        fp.write(content.replace(
+            'FAKECHROOT_DETECT=1 /bin/echo',
+            'FAKECHROOT_DETECT=1 sh -c :'))
 
 
 def debootstrap2(arch):
@@ -114,7 +119,14 @@ if __name__ == '__main__':
     args = parser.parse_args()
     if args.v:
         logging.basicConfig(level=logging.DEBUG)
-    if args.s is None or args.s == 'debootstrap1':
-        debootstrap1(args.a)
-    if args.s is None or args.s == 'debootstrap2':
-        debootstrap2(args.a)
+    sequence = [
+        debootstrap1,
+        copy_qemu_user_static,
+        extract_bootstrapping_tools,
+        fixup_fakechroot,
+        debootstrap2,
+    ]
+    for step in sequence:
+        if args.s is None or args.s == step.__name__:
+            logging.info('[*] %s', step.__name__)
+            step(args.a)
