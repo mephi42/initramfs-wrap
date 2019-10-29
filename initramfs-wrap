@@ -5,6 +5,7 @@ import logging
 import os
 import shutil
 import subprocess
+import tempfile
 
 DEB2QEMU = {
     'arm64': 'aarch64',
@@ -15,14 +16,6 @@ def get_qemu_arch(arch):
     return DEB2QEMU.get(arch, arch)
 
 
-def get_chroot(arch):
-    return os.path.join(os.getcwd(), f'debootstrap-{arch}')
-
-
-def get_chroot_state(arch):
-    return os.path.join(get_chroot(arch), 'fakeroot-state')
-
-
 def get_binfmt_misc_interpreter(arch):
     with open(f'/proc/sys/fs/binfmt_misc/qemu-{get_qemu_arch(arch)}') as fp:
         for line in fp:
@@ -31,15 +24,14 @@ def get_binfmt_misc_interpreter(arch):
     raise Exception('/proc/sys/fs/binfmt_misc is not configured')
 
 
-def extract_deb(arch, deb):
+def extract_deb(chroot, deb):
     archives = os.path.join(
-        get_chroot(arch), 'var', 'cache', 'apt', 'archives')
+        chroot, 'var', 'cache', 'apt', 'archives')
     deb_path, = glob(os.path.join(archives, f'{deb}_*.deb'))
-    subprocess.check_call(['dpkg', '-x', deb_path, get_chroot(arch)])
+    subprocess.check_call(['dpkg', '-x', deb_path, chroot])
 
 
-def run_in_chroot(arch, cmd):
-    chroot = get_chroot(arch)
+def run_in_chroot(chroot, cmd):
     env_path = os.environ['PATH']
     fakechroot = f'{chroot}/bin/fakechroot'
     libfakechroot, = glob(f'{chroot}/usr/lib/*/fakechroot/libfakechroot.so')
@@ -60,7 +52,7 @@ def run_in_chroot(arch, cmd):
     subprocess.check_call(args)
 
 
-def debootstrap1(arch):
+def debootstrap1(chroot, arch):
     cache = os.path.expanduser('~/.cache/initramfs-wrap/debootstrap')
     os.makedirs(cache, exist_ok=True)
     packages = ','.join((
@@ -77,7 +69,7 @@ def debootstrap1(arch):
     subprocess.check_call([
         'fakechroot',
         'fakeroot',
-        '-s', get_chroot_state(arch),
+        '-s', os.path.join(chroot, 'fakeroot-state'),
         'debootstrap',
         f'--cache-dir={cache}',
         '--foreign',
@@ -85,22 +77,22 @@ def debootstrap1(arch):
         '--variant=fakechroot',
         f'--include={packages}',
         'testing',
-        get_chroot(arch),
+        chroot,
     ])
 
 
-def copy_qemu_user_static(arch):
+def copy_qemu_user_static(chroot, arch):
     qemu_path = get_binfmt_misc_interpreter(arch)
-    shutil.copy(qemu_path, f'debootstrap-{arch}' + qemu_path)
+    shutil.copy(qemu_path, chroot + qemu_path)
 
 
-def extract_bootstrapping_tools(arch):
+def extract_bootstrapping_tools(chroot, arch):
     for package in ('libfakeroot', 'fakeroot', 'libfakechroot', 'fakechroot'):
-        extract_deb(arch, package)
+        extract_deb(chroot, package)
 
 
-def fixup_fakechroot(arch):
-    path = os.path.join(get_chroot(arch), 'bin', 'fakechroot')
+def fixup_fakechroot(chroot, arch):
+    path = os.path.join(chroot, 'bin', 'fakechroot')
     with open(path, 'r+') as fp:
         content = fp.read()
         fp.truncate(0)
@@ -116,25 +108,24 @@ EXCLUDE_PATHS = (
 )
 
 
-def configure_dpkg_exclude(arch):
-    config_path = os.path.join(
-        get_chroot(arch), 'etc', 'dpkg', 'dpkg.cfg.d', 'exclude')
+def configure_dpkg_exclude(chroot, arch):
+    config_path = os.path.join(chroot, 'etc', 'dpkg', 'dpkg.cfg.d', 'exclude')
     with open(config_path, 'w') as fp:
         for exclude_path in EXCLUDE_PATHS:
             fp.write(f'path-exclude={exclude_path}/*\n')
 
 
-def prune_dpkg_exclude(arch):
+def prune_dpkg_exclude(chroot, arch):
     for exclude_path in EXCLUDE_PATHS:
-        run_in_chroot(arch, ['find', exclude_path, '-type', 'f', '-delete'])
+        run_in_chroot(chroot, ['find', exclude_path, '-type', 'f', '-delete'])
 
 
-def debootstrap2(arch):
-    run_in_chroot(arch, ['/debootstrap/debootstrap', '--second-stage'])
+def debootstrap2(chroot, arch):
+    run_in_chroot(chroot, ['/debootstrap/debootstrap', '--second-stage'])
 
 
-def fixup_fakechroot_again(arch):
-    fixup_fakechroot(arch)
+def fixup_fakechroot_again(chroot, arch):
+    fixup_fakechroot(chroot, arch)
 
 
 APT_CACHE_PATHS = (
@@ -143,15 +134,29 @@ APT_CACHE_PATHS = (
 )
 
 
-def prune_apt_cache(arch):
+def prune_apt_cache(chroot, arch):
     for apt_cache_path in APT_CACHE_PATHS:
-        run_in_chroot(arch, ['rm', '-r', apt_cache_path])
+        run_in_chroot(chroot, ['rm', '-r', apt_cache_path])
+
+
+def archive_chroot(chroot, arch):
+    subprocess.check_call([
+        'fakeroot',
+        '-i', os.path.join(chroot, 'fakeroot-state'),
+        '-s', os.path.join(chroot, 'fakeroot-state'),
+        'tar',
+        '-C', chroot,
+        '-czf', os.path.expanduser(f'~/.cache/initramfs-wrap/{arch}.tar.gz'),
+        '.',
+    ])
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('-a', required=True)
+    parser.add_argument('-c')
     parser.add_argument('-i', required=True)
+    parser.add_argument('-k', action='store_true')
     parser.add_argument('-o', required=True)
     parser.add_argument('-s')
     parser.add_argument('-v', action='store_true')
@@ -168,8 +173,21 @@ if __name__ == '__main__':
         debootstrap2,
         fixup_fakechroot_again,
         prune_apt_cache,
+        archive_chroot,
     ]
-    for step in sequence:
-        if args.s is None or args.s == step.__name__:
-            logging.info('[*] %s', step.__name__)
-            step(args.a)
+    if args.c is None:
+        chroot = tempfile.mkdtemp(prefix=f'debootstrap-{args.a}-')
+        logging.info('[*] Created %s', chroot)
+    else:
+        chroot = args.c
+        logging.info('[*] Reusing %s', chroot)
+    try:
+        for step in sequence:
+            if args.s is None or args.s == step.__name__:
+                logging.info('[*] %s', step.__name__)
+                step(chroot, args.a)
+    finally:
+        if args.c is None and not args.k:
+            shutil.rmtree(chroot)
+        else:
+            logging.info('[*] Keeping %s', chroot)
