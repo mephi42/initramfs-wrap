@@ -29,7 +29,11 @@ Upon booting, it will give you a shell. The contents of the original
 
 to resume the usual boot sequence. In addition to that, you will be able to use
 `gdb`, `strace` and `valgrind` to debug the programs contained within the
-original initramfs.
+original initramfs:
+
+```
+# gdb --args chroot orig/init /ctftask
+```
 
 # Prerequisites
 
@@ -41,9 +45,10 @@ original initramfs.
 * `qemu-user-static >= 4.1.0`
 
 `qemu-user-static` version `4.1.0` or newer is required for commit
-`f3a8bdc1d5b2` - older versions will choke on symlink loops and get stuck with
-100% CPU usage. `4.1.0` is not currently in the distros, so install whatever is
-there (my Ubuntu 19.10 has `4.0.0`) and then build and install `4.1.0` on top:
+[`f3a8bdc1d5b2`](https://git.qemu.org/?p=qemu.git;a=commit;h=f3a8bdc1d5b2) -
+older versions will choke on symlink loops and get stuck with 100% CPU usage.
+`4.1.0` is not currently in the distros, so install whatever is there (my Ubuntu
+19.10 has `4.0.0`) and then build and install `4.1.0` on top:
 
 ```
 $ make -f Makefile.qemu -j$(getconf _NPROCESSORS_ONLN)
