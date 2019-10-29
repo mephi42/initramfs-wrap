@@ -38,6 +38,28 @@ def extract_deb(arch, deb):
     subprocess.check_call(['dpkg', '-x', deb_path, get_chroot(arch)])
 
 
+def run_in_chroot(arch, cmd):
+    chroot = get_chroot(arch)
+    env_path = os.environ['PATH']
+    fakechroot = f'{chroot}/bin/fakechroot'
+    libfakechroot, = glob(f'{chroot}/usr/lib/*/fakechroot/libfakechroot.so')
+    args = [
+        'env',
+        f'QEMU_LD_PREFIX={chroot}',
+        f'PATH={chroot}/sbin:{chroot}/bin:{env_path}',
+        'sh',
+        fakechroot,
+        '-l', libfakechroot,
+        'chroot',
+        chroot,
+        'fakeroot-sysv',
+        '-i', '/fakeroot-state',
+        '-s', '/fakeroot-state',
+    ]
+    args.extend(cmd)
+    subprocess.check_call(args)
+
+
 def debootstrap1(arch):
     cache = os.path.expanduser('~/.cache/initramfs-wrap/debootstrap')
     os.makedirs(cache, exist_ok=True)
@@ -78,7 +100,8 @@ def extract_bootstrapping_tools(arch):
 
 
 def fixup_fakechroot(arch):
-    with open(os.path.join(f'{get_chroot(arch)}/bin/fakechroot'), 'r+') as fp:
+    path = os.path.join(get_chroot(arch), 'bin', 'fakechroot')
+    with open(path, 'r+') as fp:
         content = fp.read()
         fp.truncate(0)
         fp.write(content.replace(
@@ -86,27 +109,43 @@ def fixup_fakechroot(arch):
             'FAKECHROOT_DETECT=1 sh -c :'))
 
 
+EXCLUDE_PATHS = (
+    '/usr/share/doc',
+    '/usr/share/locale',
+    '/usr/share/man',
+)
+
+
+def configure_dpkg_exclude(arch):
+    config_path = os.path.join(
+        get_chroot(arch), 'etc', 'dpkg', 'dpkg.cfg.d', 'exclude')
+    with open(config_path, 'w') as fp:
+        for exclude_path in EXCLUDE_PATHS:
+            fp.write(f'path-exclude={exclude_path}/*\n')
+
+
+def prune_dpkg_exclude(arch):
+    for exclude_path in EXCLUDE_PATHS:
+        run_in_chroot(arch, ['find', exclude_path, '-type', 'f', '-delete'])
+
+
 def debootstrap2(arch):
-    chroot = get_chroot(arch)
-    env_path = os.environ['PATH']
-    fakechroot = f'{chroot}/bin/fakechroot'
-    libfakechroot, = glob(f'{chroot}/usr/lib/*/fakechroot/libfakechroot.so')
-    subprocess.check_call([
-        'env',
-        f'QEMU_LD_PREFIX={chroot}',
-        f'PATH={chroot}/sbin:{chroot}/bin:{env_path}',
-        'sh',
-        fakechroot,
-        '-l', libfakechroot,
-        'chroot',
-        chroot,
-        'fakeroot-sysv',
-        '-i', '/fakeroot-state',
-        '-s', '/fakeroot-state',
-        '/debootstrap/debootstrap', '--second-stage',
-    ])
-    shutil.rmtree(f'{chroot}/var/cache/apt/archives')
-    shutil.rmtree(f'{chroot}/var/lib/apt/lists')
+    run_in_chroot(arch, ['/debootstrap/debootstrap', '--second-stage'])
+
+
+def fixup_fakechroot_again(arch):
+    fixup_fakechroot(arch)
+
+
+APT_CACHE_PATHS = (
+    '/var/cache/apt/archives',
+    '/var/lib/apt/lists',
+)
+
+
+def prune_apt_cache(arch):
+    for apt_cache_path in APT_CACHE_PATHS:
+        run_in_chroot(arch, ['rm', '-r', apt_cache_path])
 
 
 if __name__ == '__main__':
@@ -124,7 +163,11 @@ if __name__ == '__main__':
         copy_qemu_user_static,
         extract_bootstrapping_tools,
         fixup_fakechroot,
+        configure_dpkg_exclude,
+        prune_dpkg_exclude,
         debootstrap2,
+        fixup_fakechroot_again,
+        prune_apt_cache,
     ]
     for step in sequence:
         if args.s is None or args.s == step.__name__:
