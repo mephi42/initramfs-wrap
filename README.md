@@ -16,23 +16,33 @@ The generated `initramfs-dbg.cpio.gz` will have the following structure:
 
 ```
 ├── bin
-├── init -> bin/sh
+├── init -> /usr/lib/systemd/systemd
 └── orig
 ```
 
-Upon booting, it will give you a shell. The contents of the original
-`initramfs.cpio.gz` will be placed under `orig`, so you can simply do:
+The contents of the original `initramfs.cpio.gz` will be placed under `orig`.
+After booting normally, you can log in as root without a password and make use
+of the debugging tools. Alternatively, you can boot with `rdinit=/bin/sh` and
+then do:
 
 ```
 # exec chroot orig/init
 ```
 
-to resume the usual boot sequence. In addition to that, you will be able to use
-`gdb`, `strace` and `valgrind` to debug the programs contained within the
-original initramfs:
+to resume the usual boot sequence.
+
+# Using GDB
+
+It is assumed that the kernel is stripped down as much as possible - in
+particular, there might be no networking. This makes debugging interactive
+applications challenging, since only one console is available. Fortunately, you
+can use `tmux` to run an application in one tab, and GDB in the other:
 
 ```
-# gdb --args chroot orig/init /ctftask
+# tmux
+(tab1)# chroot /orig /init
+^b p
+(tab2)# gdb -ex 'set sysroot /orig' -p $(pidof cat)
 ```
 
 # Prerequisites
