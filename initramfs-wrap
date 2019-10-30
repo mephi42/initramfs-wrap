@@ -188,16 +188,28 @@ def extract_chroot(chroot, arch, input_initramfs, output_initramfs):
     ])
 
 
-def extract_input_initramfs(chroot, arch, input_initramfs, output_initramfs):
+def extract_input_initramfs_fp(chroot, fp):
     orig = os.path.join(chroot, 'orig')
     os.makedirs(orig, exist_ok=True)
-    with gzip.open(input_initramfs) as fp:
-        args = host_fakeroot_command(['cpio', '-idv'])
-        p = subprocess.Popen(args, stdin=subprocess.PIPE, cwd=orig)
-        shutil.copyfileobj(fp, p.stdin)
-        retcode = p.wait()
-        if retcode != 0:
-            raise subprocess.CalledProcessError(retcode, args)
+    args = host_fakeroot_command(['cpio', '-idv'])
+    p = subprocess.Popen(args, stdin=subprocess.PIPE, cwd=orig)
+    shutil.copyfileobj(fp, p.stdin)
+    retcode = p.wait()
+    if retcode != 0:
+        raise subprocess.CalledProcessError(retcode, args)
+
+
+def extract_input_initramfs(chroot, arch, input_initramfs, output_initramfs):
+    with open(input_initramfs, 'rb') as fp:
+        magic = fp.read(6)
+        fp.seek(0)
+        if magic[:2] == b'\037\213':
+            with gzip.open(fp) as gzfp:
+                extract_input_initramfs_fp(chroot, gzfp)
+        elif magic == b'070701':
+            extract_input_initramfs_fp(chroot, fp)
+        else:
+            raise Exception(f'{input_initramfs} is neither .gz nor .cpio file')
 
 
 def configure_init(chroot, arch, input_initramfs, output_initramfs):
