@@ -26,7 +26,7 @@ of the debugging tools. Alternatively, you can boot with `rdinit=/bin/sh` and
 then do:
 
 ```
-# exec chroot orig/init
+# exec chroot /orig /init
 ```
 
 to resume the usual boot sequence.
@@ -89,6 +89,8 @@ The intermediate results are cached in `~/.cache/initramfs-wrap`.
   kill QEMU. [Here is the fix](https://stackoverflow.com/a/49751144).
 * Some scripts in the original initramfs might access `/dev/console` directly,
   bypassing `tmux`. Such scripts need to be adjusted.
+* Wrapped initramfs will consume ~256M extra RAM. If the system does not boot,
+  try increasing QEMU RAM.
 
 # Links
 
