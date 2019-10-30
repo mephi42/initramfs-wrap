@@ -81,8 +81,8 @@ def debootstrap1(chroot, arch):
         'gdb',
         'iproute2',
         'procps',
-        'screen',
         'strace',
+        'tmux',
         'valgrind',
         'vim-tiny',
     ))
