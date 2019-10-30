@@ -91,6 +91,7 @@ def debootstrap1(chroot, arch):
         f'--arch={arch}',
         '--variant=fakechroot',
         f'--include={packages}',
+        f'--exclude=tzdata',
         'testing',
         chroot,
     ])
