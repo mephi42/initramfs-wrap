@@ -231,6 +231,11 @@ def fixup_var_run(chroot, arch, input_initramfs, output_initramfs):
     ]), cwd=chroot)
 
 
+def configure_hostname(chroot, arch, input_initramfs, output_initramfs):
+    with open(os.path.join(chroot, 'etc', 'hostname'), 'w') as fp:
+        fp.write('initramfs-wrap\n')
+
+
 def archive_output_initramfs(chroot, arch, input_initramfs, output_initramfs):
     with gzip.open(output_initramfs, 'wb', 1) as fp:
         args = host_fakeroot_command([
@@ -252,6 +257,7 @@ INITRAMFS_SEQUENCE = (
     configure_root,
     fixup_proc,
     fixup_var_run,
+    configure_hostname,
     archive_output_initramfs,
 )
 
