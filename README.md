@@ -62,6 +62,11 @@ $ sudo update-binfmts --enable qemu-$ARCH
 
 The intermediate results are cached in `~/.cache/initramfs-wrap`.
 
+# Random advice
+
+* Debugging with GDB requires Ctrl+C to be working, which in some setups might
+  kill QEMU. [Here is the fix](https://stackoverflow.com/a/49751144).
+
 # Links
 
 * [foreign debian bootstrapping without root priviliges with fakeroot,
