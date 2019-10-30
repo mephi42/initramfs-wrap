@@ -238,12 +238,12 @@ def configure_root(chroot, **kwargs):
     ]))
 
 
-def fixup_proc(chroot, **kwargs):
+def fixup_proc_dev(chroot, **kwargs):
     subprocess.check_call(host_fakeroot_command([
-        'rm', 'proc',
+        'rm', 'proc', 'dev',
     ]), cwd=chroot)
     subprocess.check_call(host_fakeroot_command([
-        'mkdir', 'proc',
+        'mkdir', 'proc', 'dev',
     ]), cwd=chroot)
 
 
@@ -298,7 +298,7 @@ INITRAMFS_SEQUENCE = (
     extract_input_initramfs,
     configure_init,
     configure_root,
-    fixup_proc,
+    fixup_proc_dev,
     fixup_var_run,
     configure_hostname,
     add_extra_files,
