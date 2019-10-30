@@ -41,8 +41,19 @@ can use `tmux` to run an application in one tab, and GDB in the other:
 ```
 # tmux
 (tab1)# chroot /orig /init
-^b p
-(tab2)# gdb -ex 'set sysroot /orig' -p $(pidof cat)
+^b c
+(tab2)# gdb -ex 'set sysroot /orig' -p $(pidof ctftask)
+```
+
+# Using strace
+
+Ditto strace:
+
+```
+# tmux
+(tab1)# strace -f -o strace.out chroot /orig /init
+^b c
+(tab2)# less +F strace.out
 ```
 
 # Prerequisites
