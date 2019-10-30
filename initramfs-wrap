@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import argparse
 from glob import glob
+import gzip
 import logging
 import os
 import shutil
@@ -50,6 +51,10 @@ def run_in_chroot(chroot, cmd):
     ]
     args.extend(cmd)
     subprocess.check_call(args)
+
+
+def get_chroot_archive(arch):
+    return os.path.expanduser(f'~/.cache/initramfs-wrap/{arch}.tar.gz')
 
 
 def debootstrap1(chroot, arch):
@@ -146,35 +151,133 @@ def archive_chroot(chroot, arch):
         '-s', os.path.join(chroot, 'fakeroot-state'),
         'tar',
         '-C', chroot,
-        '-czf', os.path.expanduser(f'~/.cache/initramfs-wrap/{arch}.tar.gz'),
+        '-czf', get_chroot_archive(arch),
         '.',
     ])
 
 
+CHROOT_SEQUENCE = (
+    debootstrap1,
+    copy_qemu_user_static,
+    extract_bootstrapping_tools,
+    fixup_fakechroot,
+    configure_dpkg_exclude,
+    prune_dpkg_exclude,
+    debootstrap2,
+    fixup_fakechroot_again,
+    prune_apt_cache,
+    archive_chroot,
+)
+
+
+def extract_chroot(chroot, arch, input_initramfs, output_initramfs):
+    subprocess.check_call([
+        'fakeroot',
+        '-s', os.path.join(chroot, 'fakeroot-state'),
+        'tar',
+        '-C', chroot,
+        '-xzf', get_chroot_archive(arch),
+    ])
+
+
+def extract_input_initramfs(chroot, arch, input_initramfs, output_initramfs):
+    orig = os.path.join(chroot, 'orig')
+    os.makedirs(orig, exist_ok=True)
+    with gzip.open(input_initramfs) as fp:
+        args = [
+            'fakeroot',
+            '-i', os.path.join(chroot, 'fakeroot-state'),
+            '-s', os.path.join(chroot, 'fakeroot-state'),
+            'cpio',
+            '-idv',
+        ]
+        p = subprocess.Popen(args, stdin=subprocess.PIPE, cwd=orig)
+        shutil.copyfileobj(fp, p.stdin)
+        retcode = p.wait()
+        if retcode != 0:
+            raise subprocess.CalledProcessError(retcode, args)
+
+
+def configure_init(chroot, arch, input_initramfs, output_initramfs):
+    subprocess.check_call([
+        'fakeroot',
+        '-i', os.path.join(chroot, 'fakeroot-state'),
+        '-s', os.path.join(chroot, 'fakeroot-state'),
+        'ln', '-s', '/usr/lib/systemd/systemd', 'init',
+    ], cwd=chroot)
+
+
+def configure_root(chroot, arch, input_initramfs, output_initramfs):
+    shadow = os.path.join(chroot, 'etc', 'shadow')
+    subprocess.check_call([
+        'fakeroot',
+        '-i', os.path.join(chroot, 'fakeroot-state'),
+        '-s', os.path.join(chroot, 'fakeroot-state'),
+        'sed', '-i', r's/root:\*:/root::/', shadow
+    ])
+
+
+def fixup_proc(chroot, arch, input_initramfs, output_initramfs):
+    subprocess.check_call([
+        'fakeroot',
+        '-i', os.path.join(chroot, 'fakeroot-state'),
+        '-s', os.path.join(chroot, 'fakeroot-state'),
+        'rm', 'proc',
+    ], cwd=chroot)
+    subprocess.check_call([
+        'fakeroot',
+        '-i', os.path.join(chroot, 'fakeroot-state'),
+        '-s', os.path.join(chroot, 'fakeroot-state'),
+        'mkdir', 'proc',
+    ], cwd=chroot)
+
+
+def archive_output_initramfs(chroot, arch, input_initramfs, output_initramfs):
+    with gzip.open(output_initramfs, 'wb', 1) as fp:
+        args = [
+            'fakeroot',
+            '-i', os.path.join(chroot, 'fakeroot-state'),
+            '-s', os.path.join(chroot, 'fakeroot-state'),
+            'sh',
+            '-c', 'find . | cpio -o -H newc',
+        ]
+        p = subprocess.Popen(
+            args, stdout=subprocess.PIPE, cwd=chroot)
+        shutil.copyfileobj(p.stdout, fp)
+        retcode = p.wait()
+        if retcode != 0:
+            raise subprocess.CalledProcessError(retcode, args)
+
+
+INITRAMFS_SEQUENCE = (
+    extract_chroot,
+    extract_input_initramfs,
+    configure_init,
+    configure_root,
+    fixup_proc,
+    archive_output_initramfs,
+)
+
+
+def is_in_sequence(args_s, sequence):
+    return args_s in (step.__name__ for step in sequence)
+
+
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser()
-    parser.add_argument('-a', required=True)
-    parser.add_argument('-c')
-    parser.add_argument('-i', required=True)
-    parser.add_argument('-k', action='store_true')
-    parser.add_argument('-o', required=True)
-    parser.add_argument('-s')
-    parser.add_argument('-v', action='store_true')
+    parser = argparse.ArgumentParser(
+        description='Add debugging tools to initramfs')
+    parser.add_argument('-a', required=True, help='Architecture')
+    parser.add_argument('-c', help='Reuse an existing chroot')
+    parser.add_argument('-f', help='Ignore cached chroot')
+    parser.add_argument('-i', required=True, help='Input initramfs')
+    parser.add_argument(
+        '-k', action='store_true', help='Keep intermediate chroot')
+    parser.add_argument('-o', required=True, help='Output initramfs')
+    parser.add_argument('-s', help='Step to execute')
+    parser.add_argument('-v', action='store_true', help='Verbose output')
     args = parser.parse_args()
     if args.v:
         logging.basicConfig(level=logging.DEBUG)
-    sequence = [
-        debootstrap1,
-        copy_qemu_user_static,
-        extract_bootstrapping_tools,
-        fixup_fakechroot,
-        configure_dpkg_exclude,
-        prune_dpkg_exclude,
-        debootstrap2,
-        fixup_fakechroot_again,
-        prune_apt_cache,
-        archive_chroot,
-    ]
     if args.c is None:
         chroot = tempfile.mkdtemp(prefix=f'debootstrap-{args.a}-')
         logging.info('[*] Created %s', chroot)
@@ -182,12 +285,20 @@ if __name__ == '__main__':
         chroot = args.c
         logging.info('[*] Reusing %s', chroot)
     try:
-        for step in sequence:
-            if args.s is None or args.s == step.__name__:
-                logging.info('[*] %s', step.__name__)
-                step(chroot, args.a)
+        if (args.f or
+                is_in_sequence(args.s, CHROOT_SEQUENCE) or
+                not os.path.exists(get_chroot_archive(args.a))):
+            for chroot_step in CHROOT_SEQUENCE:
+                if args.s is None or args.s == chroot_step.__name__:
+                    logging.info('[*] %s', chroot_step.__name__)
+                    chroot_step(chroot, args.a)
+        for initramfs_step in INITRAMFS_SEQUENCE:
+            if args.s is None or args.s == initramfs_step.__name__:
+                logging.info('[*] %s', initramfs_step.__name__)
+                initramfs_step(chroot, args.a, args.i, args.o)
     finally:
         if args.c is None and not args.k:
+            logging.info('[*] Deleting %s', chroot)
             shutil.rmtree(chroot)
         else:
             logging.info('[*] Keeping %s', chroot)
