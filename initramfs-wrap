@@ -262,7 +262,11 @@ def configure_hostname(chroot, arch, input_initramfs, output_initramfs):
 
 
 def archive_output_initramfs(chroot, arch, input_initramfs, output_initramfs):
-    with gzip.open(output_initramfs, 'wb', 1) as fp:
+    if output_initramfs.endswith('.gz'):
+        fp = gzip.open(output_initramfs, 'wb', 1)
+    else:
+        fp = open(output_initramfs, 'wb')
+    with fp:
         exclude_paths = [
             './fakeroot-state',
             f'.{get_binfmt_misc_interpreter(arch)}',
