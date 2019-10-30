@@ -191,7 +191,7 @@ CHROOT_SEQUENCE = (
 )
 
 
-def extract_chroot(chroot, arch, input_initramfs, output_initramfs):
+def extract_chroot(chroot, arch, **kwargs):
     subprocess.check_call([
         'fakeroot',
         '-s', os.path.join(chroot, 'fakeroot-state'),
@@ -212,7 +212,7 @@ def extract_input_initramfs_fp(chroot, fp):
         raise subprocess.CalledProcessError(retcode, args)
 
 
-def extract_input_initramfs(chroot, arch, input_initramfs, output_initramfs):
+def extract_input_initramfs(chroot, input_initramfs, **kwargs):
     with open(input_initramfs, 'rb') as fp:
         magic = fp.read(6)
         fp.seek(0)
@@ -225,20 +225,20 @@ def extract_input_initramfs(chroot, arch, input_initramfs, output_initramfs):
             raise Exception(f'{input_initramfs} is neither .gz nor .cpio file')
 
 
-def configure_init(chroot, arch, input_initramfs, output_initramfs):
+def configure_init(chroot, **kwargs):
     subprocess.check_call(host_fakeroot_command([
         'ln', '-s', '/usr/lib/systemd/systemd', 'init',
     ]), cwd=chroot)
 
 
-def configure_root(chroot, arch, input_initramfs, output_initramfs):
+def configure_root(chroot, **kwargs):
     shadow = os.path.join(chroot, 'etc', 'shadow')
     subprocess.check_call(host_fakeroot_command([
         'sed', '-i', r's/root:\*:/root::/', shadow,
     ]))
 
 
-def fixup_proc(chroot, arch, input_initramfs, output_initramfs):
+def fixup_proc(chroot, **kwargs):
     subprocess.check_call(host_fakeroot_command([
         'rm', 'proc',
     ]), cwd=chroot)
@@ -247,7 +247,7 @@ def fixup_proc(chroot, arch, input_initramfs, output_initramfs):
     ]), cwd=chroot)
 
 
-def fixup_var_run(chroot, arch, input_initramfs, output_initramfs):
+def fixup_var_run(chroot, **kwargs):
     subprocess.check_call(host_fakeroot_command([
         'rm', 'var/run',
     ]), cwd=chroot)
@@ -256,12 +256,19 @@ def fixup_var_run(chroot, arch, input_initramfs, output_initramfs):
     ]), cwd=chroot)
 
 
-def configure_hostname(chroot, arch, input_initramfs, output_initramfs):
+def configure_hostname(chroot, **kwargs):
     with open(os.path.join(chroot, 'etc', 'hostname'), 'w') as fp:
         fp.write('initramfs-wrap\n')
 
 
-def archive_output_initramfs(chroot, arch, input_initramfs, output_initramfs):
+def add_extra_files(chroot, extra_files, **kwargs):
+    for spec in extra_files:
+        src, dst = spec.split(':')
+        real_dst = f'{chroot}{dst}'
+        shutil.copyfile(src, real_dst)
+
+
+def archive_output_initramfs(chroot, arch, output_initramfs, **kwargs):
     if output_initramfs.endswith('.gz'):
         fp = gzip.open(output_initramfs, 'wb', 1)
     else:
@@ -294,6 +301,7 @@ INITRAMFS_SEQUENCE = (
     fixup_proc,
     fixup_var_run,
     configure_hostname,
+    add_extra_files,
     archive_output_initramfs,
 )
 
@@ -307,6 +315,8 @@ if __name__ == '__main__':
         description='Add debugging tools to initramfs')
     parser.add_argument('-a', required=True, help='Architecture')
     parser.add_argument('-c', help='Reuse an existing chroot')
+    parser.add_argument(
+        '-d', action='append', help='Extra files to package (SRC:DST)')
     parser.add_argument('-f', help='Ignore cached chroot')
     parser.add_argument('-i', required=True, help='Input initramfs')
     parser.add_argument(
@@ -334,7 +344,13 @@ if __name__ == '__main__':
         for initramfs_step in INITRAMFS_SEQUENCE:
             if args.s is None or args.s == initramfs_step.__name__:
                 logging.info('[*] %s', initramfs_step.__name__)
-                initramfs_step(chroot, args.a, args.i, args.o)
+                initramfs_step(
+                    chroot=chroot,
+                    arch=args.a,
+                    input_initramfs=args.i,
+                    output_initramfs=args.o,
+                    extra_files=args.d,
+                )
     finally:
         if args.c is None and not args.k:
             logging.info('[*] Deleting %s', chroot)
