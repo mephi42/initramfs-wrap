@@ -265,10 +265,11 @@ def configure_hostname(chroot, **kwargs):
 
 
 def add_extra_files(chroot, extra_files, **kwargs):
-    for spec in extra_files:
-        src, dst = spec.split(':')
-        real_dst = f'{chroot}{dst}'
-        shutil.copyfile(src, real_dst)
+    if extra_files is not None:
+        for spec in extra_files:
+            src, dst = spec.split(':')
+            real_dst = f'{chroot}{dst}'
+            shutil.copyfile(src, real_dst)
 
 
 def archive_output_initramfs(chroot, arch, output_initramfs, **kwargs):
