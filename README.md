@@ -7,7 +7,7 @@ is for a foreign architecture.
 
 ```
 $ initramfs-wrap \
-      -a aarch64 \
+      -a arm64 \
       -i initramfs.cpio.gz \
       -o initramfs-dbg.cpio.gz
 ```
