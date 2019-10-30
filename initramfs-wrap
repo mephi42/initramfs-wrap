@@ -67,10 +67,15 @@ def host_fakeroot_command(args):
     return result
 
 
+DEB2GNU = {
+    'arm64': 'aarch64',
+}
+
+
 def debootstrap1(chroot, arch):
     cache = os.path.expanduser('~/.cache/initramfs-wrap/debootstrap')
     os.makedirs(cache, exist_ok=True)
-    packages = ','.join((
+    include_packages = ','.join((
         'fakechroot',
         'fakeroot',
         'gdb',
@@ -81,6 +86,13 @@ def debootstrap1(chroot, arch):
         'valgrind',
         'vim-tiny',
     ))
+    exclude_packages = ','.join((
+        'binutils',
+        'binutils-common',
+        f'binutils-{DEB2GNU.get(arch, arch)}-linux-gnu',
+        'libbinutils',
+        'tzdata',
+    ))
     subprocess.check_call([
         'fakechroot',
         'fakeroot',
@@ -90,8 +102,8 @@ def debootstrap1(chroot, arch):
         '--foreign',
         f'--arch={arch}',
         '--variant=fakechroot',
-        f'--include={packages}',
-        f'--exclude=tzdata',
+        f'--include={include_packages}',
+        f'--exclude={exclude_packages}',
         'testing',
         chroot,
     ])
