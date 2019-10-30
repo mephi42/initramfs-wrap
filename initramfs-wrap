@@ -238,9 +238,15 @@ def configure_hostname(chroot, arch, input_initramfs, output_initramfs):
 
 def archive_output_initramfs(chroot, arch, input_initramfs, output_initramfs):
     with gzip.open(output_initramfs, 'wb', 1) as fp:
+        exclude_paths = [
+            './fakeroot-state',
+        ]
+        exclude_expr = ' '.join(
+            f'! -path {exclude_path}'
+            for exclude_path in exclude_paths)
         args = host_fakeroot_command([
             'sh',
-            '-c', 'find . | cpio -o -H newc',
+            '-c', f'find . {exclude_expr} | cpio -o -H newc',
         ])
         p = subprocess.Popen(
             args, stdout=subprocess.PIPE, cwd=chroot)
