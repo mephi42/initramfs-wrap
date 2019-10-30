@@ -56,6 +56,15 @@ Ditto strace:
 (tab2)# less +F strace.out
 ```
 
+# Using valgrind
+
+Running valgrind in chroot is problematic. Still, some degree of isolation can
+be achieved using environment variables:
+
+```
+# valgrind env LD_LIBRARY_PATH=/orig/lib:/orig/usr/lib /orig/lib/ld.so /orig/ctftask
+```
+
 # Prerequisites
 
 * `debootstrap`
