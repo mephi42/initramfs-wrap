@@ -66,6 +66,8 @@ The intermediate results are cached in `~/.cache/initramfs-wrap`.
 
 * Debugging with GDB requires Ctrl+C to be working, which in some setups might
   kill QEMU. [Here is the fix](https://stackoverflow.com/a/49751144).
+* Some scripts in the original initramfs might access `/dev/console` directly,
+  bypassing `tmux`. Such scripts need to be adjusted.
 
 # Links
 
