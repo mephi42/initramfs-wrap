@@ -4,21 +4,26 @@ from glob import glob
 import gzip
 import logging
 import os
+import platform
 import shutil
 import subprocess
 import tempfile
 
+DEB2GNU = {
+    'amd64': 'x86_64',
+    'arm64': 'aarch64',
+}
 DEB2QEMU = {
+    'amd64': 'x86_64',
     'arm64': 'aarch64',
 }
 
 
-def get_qemu_arch(arch):
-    return DEB2QEMU.get(arch, arch)
-
-
 def get_binfmt_misc_interpreter(arch):
-    with open(f'/proc/sys/fs/binfmt_misc/qemu-{get_qemu_arch(arch)}') as fp:
+    if platform.machine() == DEB2GNU.get(arch, arch):
+        return None
+    qemu_arch = DEB2QEMU.get(arch, arch)
+    with open(f'/proc/sys/fs/binfmt_misc/qemu-{qemu_arch}') as fp:
         for line in fp:
             if line.startswith('interpreter '):
                 return line[12:-1]
@@ -67,11 +72,6 @@ def host_fakeroot_command(args):
     return result
 
 
-DEB2GNU = {
-    'arm64': 'aarch64',
-}
-
-
 def debootstrap1(chroot, arch):
     cache = os.path.expanduser('~/.cache/initramfs-wrap/debootstrap')
     os.makedirs(cache, exist_ok=True)
@@ -111,7 +111,8 @@ def debootstrap1(chroot, arch):
 
 def copy_qemu_user_static(chroot, arch):
     qemu_path = get_binfmt_misc_interpreter(arch)
-    shutil.copy(qemu_path, chroot + qemu_path)
+    if qemu_path is not None:
+        shutil.copy(qemu_path, chroot + qemu_path)
 
 
 def extract_bootstrapping_tools(chroot, arch):
@@ -278,8 +279,10 @@ def archive_output_initramfs(chroot, arch, output_initramfs, **kwargs):
     with fp:
         exclude_paths = [
             './fakeroot-state',
-            f'.{get_binfmt_misc_interpreter(arch)}',
         ]
+        qemu_path = {get_binfmt_misc_interpreter(arch)}
+        if qemu_path is not None:
+            exclude_paths.append(f'.{qemu_path}')
         exclude_expr = ' '.join(
             f'! -path {exclude_path}'
             for exclude_path in exclude_paths)
