@@ -222,6 +222,15 @@ def fixup_proc(chroot, arch, input_initramfs, output_initramfs):
     ]), cwd=chroot)
 
 
+def fixup_var_run(chroot, arch, input_initramfs, output_initramfs):
+    subprocess.check_call(host_fakeroot_command([
+        'rm', 'var/run',
+    ]), cwd=chroot)
+    subprocess.check_call(host_fakeroot_command([
+        'mkdir', 'var/run',
+    ]), cwd=chroot)
+
+
 def archive_output_initramfs(chroot, arch, input_initramfs, output_initramfs):
     with gzip.open(output_initramfs, 'wb', 1) as fp:
         args = host_fakeroot_command([
@@ -242,6 +251,7 @@ INITRAMFS_SEQUENCE = (
     configure_init,
     configure_root,
     fixup_proc,
+    fixup_var_run,
     archive_output_initramfs,
 )
 
