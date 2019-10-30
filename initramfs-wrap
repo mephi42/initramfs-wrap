@@ -168,6 +168,16 @@ def prune_apt_cache(chroot, arch):
         run_in_chroot(chroot, ['rm', '-r', apt_cache_path])
 
 
+def fixup_symlinks(chroot, arch):
+    ln = f'ln -fsT "$(readlink "$0" | cut -c{len(chroot) + 1}-)" $0'
+    subprocess.check_call(host_fakeroot_command([
+        'find',
+        '.',
+        '-lname', os.path.join(chroot, '*'),
+        '-exec', 'sh', '-c', ln, '{}', ';',
+    ]), cwd=chroot)
+
+
 def archive_chroot(chroot, arch):
     subprocess.check_call(host_fakeroot_command([
         'tar',
@@ -187,6 +197,7 @@ CHROOT_SEQUENCE = (
     debootstrap2,
     fixup_fakechroot_again,
     prune_apt_cache,
+    fixup_symlinks,
     archive_chroot,
 )
 
@@ -247,15 +258,6 @@ def fixup_proc_dev(chroot, **kwargs):
     ]), cwd=chroot)
 
 
-def fixup_var_run(chroot, **kwargs):
-    subprocess.check_call(host_fakeroot_command([
-        'rm', 'var/run',
-    ]), cwd=chroot)
-    subprocess.check_call(host_fakeroot_command([
-        'mkdir', 'var/run',
-    ]), cwd=chroot)
-
-
 def configure_hostname(chroot, **kwargs):
     with open(os.path.join(chroot, 'etc', 'hostname'), 'w') as fp:
         fp.write('initramfs-wrap\n')
@@ -299,7 +301,6 @@ INITRAMFS_SEQUENCE = (
     configure_init,
     configure_root,
     fixup_proc_dev,
-    fixup_var_run,
     configure_hostname,
     add_extra_files,
     archive_output_initramfs,
