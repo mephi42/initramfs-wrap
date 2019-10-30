@@ -79,7 +79,7 @@ def debootstrap1(chroot, arch):
         'screen',
         'strace',
         'valgrind',
-        'vim',
+        'vim-tiny',
     ))
     subprocess.check_call([
         'fakechroot',
