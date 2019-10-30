@@ -317,7 +317,7 @@ if __name__ == '__main__':
     parser.add_argument('-c', help='Reuse an existing chroot')
     parser.add_argument(
         '-d', action='append', help='Extra files to package (SRC:DST)')
-    parser.add_argument('-f', help='Ignore cached chroot')
+    parser.add_argument('-f', action='store_true', help='Ignore cached chroot')
     parser.add_argument('-i', required=True, help='Input initramfs')
     parser.add_argument(
         '-k', action='store_true', help='Keep intermediate chroot')
