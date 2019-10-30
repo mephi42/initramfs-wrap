@@ -57,6 +57,16 @@ def get_chroot_archive(arch):
     return os.path.expanduser(f'~/.cache/initramfs-wrap/{arch}.tar.gz')
 
 
+def host_fakeroot_command(args):
+    result = [
+        'fakeroot',
+        '-i', os.path.join(chroot, 'fakeroot-state'),
+        '-s', os.path.join(chroot, 'fakeroot-state'),
+    ]
+    result.extend(args)
+    return result
+
+
 def debootstrap1(chroot, arch):
     cache = os.path.expanduser('~/.cache/initramfs-wrap/debootstrap')
     os.makedirs(cache, exist_ok=True)
@@ -146,15 +156,12 @@ def prune_apt_cache(chroot, arch):
 
 
 def archive_chroot(chroot, arch):
-    subprocess.check_call([
-        'fakeroot',
-        '-i', os.path.join(chroot, 'fakeroot-state'),
-        '-s', os.path.join(chroot, 'fakeroot-state'),
+    subprocess.check_call(host_fakeroot_command([
         'tar',
         '-C', chroot,
         '-czf', get_chroot_archive(arch),
         '.',
-    ])
+    ]))
 
 
 CHROOT_SEQUENCE = (
@@ -185,13 +192,7 @@ def extract_input_initramfs(chroot, arch, input_initramfs, output_initramfs):
     orig = os.path.join(chroot, 'orig')
     os.makedirs(orig, exist_ok=True)
     with gzip.open(input_initramfs) as fp:
-        args = [
-            'fakeroot',
-            '-i', os.path.join(chroot, 'fakeroot-state'),
-            '-s', os.path.join(chroot, 'fakeroot-state'),
-            'cpio',
-            '-idv',
-        ]
+        args = host_fakeroot_command(['cpio', '-idv'])
         p = subprocess.Popen(args, stdin=subprocess.PIPE, cwd=orig)
         shutil.copyfileobj(fp, p.stdin)
         retcode = p.wait()
@@ -200,48 +201,33 @@ def extract_input_initramfs(chroot, arch, input_initramfs, output_initramfs):
 
 
 def configure_init(chroot, arch, input_initramfs, output_initramfs):
-    subprocess.check_call([
-        'fakeroot',
-        '-i', os.path.join(chroot, 'fakeroot-state'),
-        '-s', os.path.join(chroot, 'fakeroot-state'),
+    subprocess.check_call(host_fakeroot_command([
         'ln', '-s', '/usr/lib/systemd/systemd', 'init',
-    ], cwd=chroot)
+    ]), cwd=chroot)
 
 
 def configure_root(chroot, arch, input_initramfs, output_initramfs):
     shadow = os.path.join(chroot, 'etc', 'shadow')
-    subprocess.check_call([
-        'fakeroot',
-        '-i', os.path.join(chroot, 'fakeroot-state'),
-        '-s', os.path.join(chroot, 'fakeroot-state'),
-        'sed', '-i', r's/root:\*:/root::/', shadow
-    ])
+    subprocess.check_call(host_fakeroot_command([
+        'sed', '-i', r's/root:\*:/root::/', shadow,
+    ]))
 
 
 def fixup_proc(chroot, arch, input_initramfs, output_initramfs):
-    subprocess.check_call([
-        'fakeroot',
-        '-i', os.path.join(chroot, 'fakeroot-state'),
-        '-s', os.path.join(chroot, 'fakeroot-state'),
+    subprocess.check_call(host_fakeroot_command([
         'rm', 'proc',
-    ], cwd=chroot)
-    subprocess.check_call([
-        'fakeroot',
-        '-i', os.path.join(chroot, 'fakeroot-state'),
-        '-s', os.path.join(chroot, 'fakeroot-state'),
+    ]), cwd=chroot)
+    subprocess.check_call(host_fakeroot_command([
         'mkdir', 'proc',
-    ], cwd=chroot)
+    ]), cwd=chroot)
 
 
 def archive_output_initramfs(chroot, arch, input_initramfs, output_initramfs):
     with gzip.open(output_initramfs, 'wb', 1) as fp:
-        args = [
-            'fakeroot',
-            '-i', os.path.join(chroot, 'fakeroot-state'),
-            '-s', os.path.join(chroot, 'fakeroot-state'),
+        args = host_fakeroot_command([
             'sh',
             '-c', 'find . | cpio -o -H newc',
-        ]
+        ])
         p = subprocess.Popen(
             args, stdout=subprocess.PIPE, cwd=chroot)
         shutil.copyfileobj(p.stdout, fp)
