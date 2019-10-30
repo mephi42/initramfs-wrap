@@ -91,6 +91,9 @@ The intermediate results are cached in `~/.cache/initramfs-wrap`.
   bypassing `tmux`. Such scripts need to be adjusted.
 * Wrapped initramfs will consume ~256M extra RAM. If the system does not boot,
   try increasing QEMU RAM.
+* Sometimes kernel is stripped to such an extent, that systemd cannot start
+  (with `[!!!!!!] Failed to start up manager, freezing.` message). In this case
+  `rdinit=/bin/sh` is the only option.
 
 # Links
 
