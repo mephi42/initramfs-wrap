@@ -118,6 +118,7 @@ def configure_dpkg_exclude(chroot, arch):
     with open(config_path, 'w') as fp:
         for exclude_path in EXCLUDE_PATHS:
             fp.write(f'path-exclude={exclude_path}/*\n')
+        fp.write(f'path-exclude=*.a\n')
 
 
 def prune_dpkg_exclude(chroot, arch):
