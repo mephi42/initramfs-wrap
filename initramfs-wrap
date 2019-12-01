@@ -58,8 +58,8 @@ def run_in_chroot(chroot, cmd):
     subprocess.check_call(args)
 
 
-def get_chroot_archive(arch):
-    return os.path.expanduser(f'~/.cache/initramfs-wrap/{arch}.tar.gz')
+def get_chroot_archive(arch, suite):
+    return os.path.expanduser(f'~/.cache/initramfs-wrap/{arch}-{suite}.tar.gz')
 
 
 def host_fakeroot_command(args):
@@ -72,7 +72,7 @@ def host_fakeroot_command(args):
     return result
 
 
-def debootstrap1(chroot, arch):
+def debootstrap1(chroot, arch, suite, **kwargs):
     cache = os.path.expanduser('~/.cache/initramfs-wrap/debootstrap')
     os.makedirs(cache, exist_ok=True)
     include_packages = ','.join((
@@ -104,23 +104,23 @@ def debootstrap1(chroot, arch):
         '--variant=fakechroot',
         f'--include={include_packages}',
         f'--exclude={exclude_packages}',
-        'testing',
+        suite,
         chroot,
     ])
 
 
-def copy_qemu_user_static(chroot, arch):
+def copy_qemu_user_static(chroot, arch, **kwargs):
     qemu_path = get_binfmt_misc_interpreter(arch)
     if qemu_path is not None:
         shutil.copy(qemu_path, chroot + qemu_path)
 
 
-def extract_bootstrapping_tools(chroot, arch):
+def extract_bootstrapping_tools(chroot, **kwargs):
     for package in ('libfakeroot', 'fakeroot', 'libfakechroot', 'fakechroot'):
         extract_deb(chroot, package)
 
 
-def fixup_fakechroot(chroot, arch):
+def fixup_fakechroot(chroot, **kwargs):
     path = os.path.join(chroot, 'bin', 'fakechroot')
     with open(path, 'r+') as fp:
         content = fp.read()
@@ -137,7 +137,7 @@ EXCLUDE_PATHS = (
 )
 
 
-def configure_dpkg_exclude(chroot, arch):
+def configure_dpkg_exclude(chroot, **kwargs):
     config_path = os.path.join(chroot, 'etc', 'dpkg', 'dpkg.cfg.d', 'exclude')
     with open(config_path, 'w') as fp:
         for exclude_path in EXCLUDE_PATHS:
@@ -145,17 +145,17 @@ def configure_dpkg_exclude(chroot, arch):
         fp.write(f'path-exclude=*.a\n')
 
 
-def prune_dpkg_exclude(chroot, arch):
+def prune_dpkg_exclude(chroot, **kwargs):
     for exclude_path in EXCLUDE_PATHS:
         run_in_chroot(chroot, ['find', exclude_path, '-type', 'f', '-delete'])
 
 
-def debootstrap2(chroot, arch):
+def debootstrap2(chroot, **kwargs):
     run_in_chroot(chroot, ['/debootstrap/debootstrap', '--second-stage'])
 
 
-def fixup_fakechroot_again(chroot, arch):
-    fixup_fakechroot(chroot, arch)
+def fixup_fakechroot_again(chroot, **kwargs):
+    fixup_fakechroot(chroot, **kwargs)
 
 
 APT_CACHE_PATHS = (
@@ -164,12 +164,12 @@ APT_CACHE_PATHS = (
 )
 
 
-def prune_apt_cache(chroot, arch):
+def prune_apt_cache(chroot, **kwargs):
     for apt_cache_path in APT_CACHE_PATHS:
         run_in_chroot(chroot, ['rm', '-r', apt_cache_path])
 
 
-def fixup_symlinks(chroot, arch):
+def fixup_symlinks(chroot, **kwargs):
     ln = f'ln -fsT "$(readlink "$0" | cut -c{len(chroot) + 1}-)" $0'
     subprocess.check_call(host_fakeroot_command([
         'find',
@@ -179,11 +179,11 @@ def fixup_symlinks(chroot, arch):
     ]), cwd=chroot)
 
 
-def archive_chroot(chroot, arch):
+def archive_chroot(chroot, arch, suite, **kwargs):
     subprocess.check_call(host_fakeroot_command([
         'tar',
         '-C', chroot,
-        '-czf', get_chroot_archive(arch),
+        '-czf', get_chroot_archive(arch, suite),
         '.',
     ]))
 
@@ -203,13 +203,13 @@ CHROOT_SEQUENCE = (
 )
 
 
-def extract_chroot(chroot, arch, **kwargs):
+def extract_chroot(chroot, arch, suite, **kwargs):
     subprocess.check_call([
         'fakeroot',
         '-s', os.path.join(chroot, 'fakeroot-state'),
         'tar',
         '-C', chroot,
-        '-xzf', get_chroot_archive(arch),
+        '-xzf', get_chroot_archive(arch, suite),
     ])
 
 
@@ -329,6 +329,7 @@ if __name__ == '__main__':
         '-k', action='store_true', help='Keep intermediate chroot')
     parser.add_argument('-o', required=True, help='Output initramfs')
     parser.add_argument('-s', help='Step to execute')
+    parser.add_argument('-u', help='Suite', default='testing')
     parser.add_argument('-v', action='store_true', help='Verbose output')
     args = parser.parse_args()
     if args.v:
@@ -342,17 +343,22 @@ if __name__ == '__main__':
     try:
         if (args.f or
                 is_in_sequence(args.s, CHROOT_SEQUENCE) or
-                not os.path.exists(get_chroot_archive(args.a))):
+                not os.path.exists(get_chroot_archive(args.a, args.u))):
             for chroot_step in CHROOT_SEQUENCE:
                 if args.s is None or args.s == chroot_step.__name__:
                     logging.info('[*] %s', chroot_step.__name__)
-                    chroot_step(chroot, args.a)
+                    chroot_step(
+                        chroot=chroot,
+                        arch=args.a,
+                        suite=args.u,
+                    )
         for initramfs_step in INITRAMFS_SEQUENCE:
             if args.s is None or args.s == initramfs_step.__name__:
                 logging.info('[*] %s', initramfs_step.__name__)
                 initramfs_step(
                     chroot=chroot,
                     arch=args.a,
+                    suite=args.u,
                     input_initramfs=args.i,
                     output_initramfs=args.o,
                     extra_files=args.d,
