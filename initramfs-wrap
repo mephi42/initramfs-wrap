@@ -273,7 +273,7 @@ def add_extra_files(chroot, extra_files, **kwargs):
             shutil.copyfile(src, real_dst)
 
 
-def archive_output_initramfs(chroot, arch, output_initramfs, **kwargs):
+def archive_output_initramfs(chroot, arch, output_initramfs, exclude, **kwargs):
     if output_initramfs.endswith('.gz'):
         fp = gzip.open(output_initramfs, 'wb', 1)
     else:
@@ -285,13 +285,16 @@ def archive_output_initramfs(chroot, arch, output_initramfs, **kwargs):
         qemu_path = get_binfmt_misc_interpreter(arch)
         if qemu_path is not None:
             exclude_paths.append(f'.{qemu_path}')
+        if exclude is not None:
+            exclude_paths.extend(exclude)
         exclude_expr = ' '.join(
-            f'! -path {exclude_path}'
+            f'! -path \'{exclude_path}\''
             for exclude_path in exclude_paths)
         args = host_fakeroot_command([
             'sh',
             '-c', f'find . {exclude_expr} | cpio -o -H newc',
         ])
+        print(args)
         p = subprocess.Popen(
             args, stdout=subprocess.PIPE, cwd=chroot)
         shutil.copyfileobj(p.stdout, fp)
@@ -331,6 +334,7 @@ if __name__ == '__main__':
     parser.add_argument('-s', help='Step to execute')
     parser.add_argument('-u', help='Suite', default='testing')
     parser.add_argument('-v', action='store_true', help='Verbose output')
+    parser.add_argument('-x', action='append', help='Extra paths to exclude')
     args = parser.parse_args()
     if args.v:
         logging.basicConfig(level=logging.DEBUG)
@@ -362,6 +366,7 @@ if __name__ == '__main__':
                     input_initramfs=args.i,
                     output_initramfs=args.o,
                     extra_files=args.d,
+                    exclude=args.x,
                 )
     finally:
         if args.c is None and not args.k:
