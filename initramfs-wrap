@@ -282,7 +282,7 @@ def archive_output_initramfs(chroot, arch, output_initramfs, **kwargs):
         exclude_paths = [
             './fakeroot-state',
         ]
-        qemu_path = {get_binfmt_misc_interpreter(arch)}
+        qemu_path = get_binfmt_misc_interpreter(arch)
         if qemu_path is not None:
             exclude_paths.append(f'.{qemu_path}')
         exclude_expr = ' '.join(
