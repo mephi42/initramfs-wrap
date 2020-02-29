@@ -11,10 +11,12 @@ import tempfile
 
 DEB2GNU = {
     'amd64': 'x86_64',
+    'armel': 'arm',
     'arm64': 'aarch64',
 }
 DEB2QEMU = {
     'amd64': 'x86_64',
+    'armel': 'arm',
     'arm64': 'aarch64',
 }
 
@@ -226,6 +228,8 @@ def extract_input_initramfs_fp(chroot, fp):
 
 
 def extract_input_initramfs(chroot, input_initramfs, **kwargs):
+    if input_initramfs is None:
+        return
     with open(input_initramfs, 'rb') as fp:
         magic = fp.read(6)
         fp.seek(0)
@@ -327,7 +331,7 @@ if __name__ == '__main__':
     parser.add_argument(
         '-d', action='append', help='Extra files to package (SRC:DST)')
     parser.add_argument('-f', action='store_true', help='Ignore cached chroot')
-    parser.add_argument('-i', required=True, help='Input initramfs')
+    parser.add_argument('-i', help='Input initramfs')
     parser.add_argument(
         '-k', action='store_true', help='Keep intermediate chroot')
     parser.add_argument('-o', required=True, help='Output initramfs')
