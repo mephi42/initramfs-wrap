@@ -277,34 +277,61 @@ def add_extra_files(chroot, extra_files, **kwargs):
             shutil.copyfile(src, real_dst)
 
 
-def archive_output_initramfs(chroot, arch, output_initramfs, exclude, **kwargs):
+def make_exclude_expr(arch, exclude):
+    exclude_paths = [
+        './fakeroot-state',
+    ]
+    qemu_path = get_binfmt_misc_interpreter(arch)
+    if qemu_path is not None:
+        exclude_paths.append(f'.{qemu_path}')
+    if exclude is not None:
+        exclude_paths.extend(exclude)
+    return ' '.join(
+        f'! -path \'{exclude_path}\''
+        for exclude_path in exclude_paths)
+
+
+def archive_output_img(path, exclude_expr):
+    img_size = 1024 * 1024 * 1024
+    img_fs = 'ext2'
+    with open(path, 'wb') as fp:
+        fp.truncate(img_size)
+    tar_args = host_fakeroot_command([
+        'sh', '-c', f'find . {exclude_expr} | tar -T - -c',
+    ])
+    tar = subprocess.Popen(tar_args, stdout=subprocess.PIPE, cwd=chroot)
+    subprocess.check_call([
+        'guestfish', '-a', path,
+        'launch', ':',
+        'part-disk', '/dev/sda', 'gpt', ':',
+        'mkfs', img_fs, '/dev/sda1', ':',
+        'mount', '/dev/sda1', '/', ':',
+        'tar-in', '-', '/',
+    ], stdin=tar.stdout)
+    retcode = tar.wait()
+    if retcode != 0:
+        raise subprocess.CalledProcessError(retcode, tar_args)
+
+
+def archive_output_initramfs(
+        chroot, arch, output_initramfs, exclude, **kwargs):
+    exclude_expr = make_exclude_expr(arch, exclude)
+    if output_initramfs.endswith('.raw'):
+        return archive_output_img(output_initramfs, exclude_expr)
+    args = host_fakeroot_command([
+        'sh', '-c', f'find . {exclude_expr} | cpio -o -H newc',
+    ])
+    p = subprocess.Popen(
+        args, stdout=subprocess.PIPE, cwd=chroot)
     if output_initramfs.endswith('.gz'):
         fp = gzip.open(output_initramfs, 'wb', 1)
     else:
         fp = open(output_initramfs, 'wb')
     with fp:
-        exclude_paths = [
-            './fakeroot-state',
-        ]
-        qemu_path = get_binfmt_misc_interpreter(arch)
-        if qemu_path is not None:
-            exclude_paths.append(f'.{qemu_path}')
-        if exclude is not None:
-            exclude_paths.extend(exclude)
-        exclude_expr = ' '.join(
-            f'! -path \'{exclude_path}\''
-            for exclude_path in exclude_paths)
-        args = host_fakeroot_command([
-            'sh',
-            '-c', f'find . {exclude_expr} | cpio -o -H newc',
-        ])
-        print(args)
-        p = subprocess.Popen(
-            args, stdout=subprocess.PIPE, cwd=chroot)
         shutil.copyfileobj(p.stdout, fp)
-        retcode = p.wait()
-        if retcode != 0:
-            raise subprocess.CalledProcessError(retcode, args)
+    retcode = p.wait()
+    if retcode != 0:
+        raise subprocess.CalledProcessError(retcode, args)
 
 
 INITRAMFS_SEQUENCE = (
