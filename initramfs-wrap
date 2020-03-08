@@ -167,17 +167,6 @@ def fixup_fakechroot_again(chroot, **kwargs):
     fixup_fakechroot(chroot, **kwargs)
 
 
-APT_CACHE_PATHS = (
-    '/var/cache/apt/archives',
-    '/var/lib/apt/lists',
-)
-
-
-def prune_apt_cache(chroot, **kwargs):
-    for apt_cache_path in APT_CACHE_PATHS:
-        run_in_chroot(chroot, ['rm', '-r', apt_cache_path])
-
-
 def fixup_symlinks(chroot, **kwargs):
     ln = f'ln -fsT "$(readlink "$0" | cut -c{len(chroot) + 1}-)" $0'
     subprocess.check_call(host_fakeroot_command([
@@ -206,7 +195,6 @@ CHROOT_SEQUENCE = (
     prune_dpkg_exclude,
     debootstrap2,
     fixup_fakechroot_again,
-    prune_apt_cache,
     fixup_symlinks,
     archive_chroot,
 )
@@ -320,6 +308,22 @@ def archive_output_img(path, exclude_expr):
         raise subprocess.CalledProcessError(retcode, tar_args)
 
 
+def remove_apt(chroot, **kwargs):
+    packages = [
+        'apt',
+        'apt-utils',
+        'libapt-inst2.0',
+        'libapt-pkg5.0',
+        'tasksel',
+        'tasksel-data',
+    ]
+    directories = [
+        '/etc/apt',
+    ]
+    run_in_chroot(chroot, ['dpkg', '--purge'] + packages)
+    run_in_chroot(chroot, ['rm', '-r'] + directories)
+
+
 def archive_output_initramfs(
         chroot, arch, output_initramfs, exclude, **kwargs):
     exclude_expr = make_exclude_expr(arch, exclude)
@@ -349,6 +353,7 @@ INITRAMFS_SEQUENCE = (
     fixup_proc_dev,
     configure_hostname,
     add_extra_files,
+    remove_apt,
     archive_output_initramfs,
 )
 
