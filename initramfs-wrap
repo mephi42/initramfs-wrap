@@ -44,9 +44,6 @@ def run_in_chroot(chroot, cmd):
     fakechroot = f'{chroot}/bin/fakechroot'
     libfakechroot, = glob(f'{chroot}/usr/lib/*/fakechroot/libfakechroot.so')
     args = [
-        'env',
-        f'QEMU_LD_PREFIX={chroot}',
-        f'PATH={chroot}/sbin:{chroot}/bin:{env_path}',
         'sh',
         fakechroot,
         '-l', libfakechroot,
@@ -57,7 +54,11 @@ def run_in_chroot(chroot, cmd):
         '-s', '/fakeroot-state',
     ]
     args.extend(cmd)
-    subprocess.check_call(args)
+    subprocess.check_call(args, env={
+        **os.environ,
+        'QEMU_LD_PREFIX': chroot,
+        'PATH': f'{chroot}/sbin:{chroot}/bin:{env_path}',
+    })
 
 
 def get_chroot_archive(arch, suite):
@@ -132,23 +133,25 @@ def fixup_fakechroot(chroot, **kwargs):
             'FAKECHROOT_DETECT=1 sh -c :'))
 
 
-EXCLUDE_PATHS = (
-    '/usr/share/doc',
-    '/usr/share/locale',
-    '/usr/share/man',
-)
+def get_exclude_paths(arch):
+    return (
+        '/usr/share/doc',
+        '/usr/share/locale',
+        '/usr/share/man',
+        f'/usr/lib/{DEB2GNU.get(arch, arch)}-linux-gnu/gconv',
+    )
 
 
-def configure_dpkg_exclude(chroot, **kwargs):
+def configure_dpkg_exclude(chroot, arch, **kwargs):
     config_path = os.path.join(chroot, 'etc', 'dpkg', 'dpkg.cfg.d', 'exclude')
     with open(config_path, 'w') as fp:
-        for exclude_path in EXCLUDE_PATHS:
+        for exclude_path in get_exclude_paths(arch):
             fp.write(f'path-exclude={exclude_path}/*\n')
         fp.write(f'path-exclude=*.a\n')
 
 
-def prune_dpkg_exclude(chroot, **kwargs):
-    for exclude_path in EXCLUDE_PATHS:
+def prune_dpkg_exclude(chroot, arch, **kwargs):
+    for exclude_path in get_exclude_paths(arch):
         run_in_chroot(chroot, ['find', exclude_path, '-type', 'f', '-delete'])
 
 
