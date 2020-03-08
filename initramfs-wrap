@@ -336,6 +336,17 @@ def remove_valgrind_tools(chroot, arch, **kwargs):
     ])
 
 
+def remove_python_codecs(chroot, arch, **kwargs):
+    gnu_arch = DEB2GNU.get(arch, arch)
+    dynload = '/usr/lib/python3.7/lib-dynload'
+    codec_glob = f'_codecs_*.cpython-37m-{gnu_arch}-linux-gnu.so'
+    run_in_chroot(chroot, [
+        'bash',
+        '-O', 'nullglob',
+        '-c', f'rm -f {dynload}/{codec_glob}'
+    ])
+
+
 def remove_apt(chroot, **kwargs):
     packages = [
         'apt',
@@ -396,6 +407,7 @@ INITRAMFS_SEQUENCE = (
     configure_hostname,
     add_extra_files,
     remove_valgrind_tools,
+    remove_python_codecs,
     remove_apt,
     archive_output_initramfs,
 )
