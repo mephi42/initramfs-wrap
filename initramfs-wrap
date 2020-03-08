@@ -95,6 +95,7 @@ def debootstrap1(chroot, arch, suite, **kwargs):
         f'binutils-{DEB2GNU.get(arch, arch)}-linux-gnu',
         'iptables',
         'libbinutils',
+        'rsyslog',
         'tzdata',
     ))
     subprocess.check_call([
