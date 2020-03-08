@@ -327,6 +327,20 @@ def remove_apt(chroot, **kwargs):
     run_in_chroot(chroot, ['rm', '-r'] + directories)
 
 
+def remove_dpkg(chroot, **kwargs):
+    packages = [
+        'debconf',
+        'dpkg',
+    ]
+    directories = [
+        '/etc/dpkg',
+        '/var/cache/debconf',
+        '/var/lib/dpkg',
+    ]
+    run_in_chroot(chroot, ['dpkg', '--purge', '--force-all'] + packages)
+    run_in_chroot(chroot, ['rm', '-r'] + directories)
+
+
 def archive_output_initramfs(
         chroot, arch, output_initramfs, exclude, **kwargs):
     exclude_expr = make_exclude_expr(arch, exclude)
