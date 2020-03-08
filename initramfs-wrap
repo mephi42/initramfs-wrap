@@ -136,7 +136,9 @@ def fixup_fakechroot(chroot, **kwargs):
 
 def get_exclude_paths(arch):
     return (
+        '/usr/share/calendar',
         '/usr/share/doc',
+        '/usr/share/info',
         '/usr/share/locale',
         '/usr/share/man',
         f'/usr/lib/{DEB2GNU.get(arch, arch)}-linux-gnu/gconv',
