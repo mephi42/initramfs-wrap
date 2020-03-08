@@ -93,6 +93,7 @@ def debootstrap1(chroot, arch, suite, **kwargs):
         'binutils',
         'binutils-common',
         f'binutils-{DEB2GNU.get(arch, arch)}-linux-gnu',
+        'iptables',
         'libbinutils',
         'tzdata',
     ))
