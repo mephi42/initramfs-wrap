@@ -78,7 +78,7 @@ def host_fakeroot_command(args):
 def debootstrap1(chroot, arch, suite, **kwargs):
     cache = os.path.expanduser('~/.cache/initramfs-wrap/debootstrap')
     os.makedirs(cache, exist_ok=True)
-    include_packages = ','.join((
+    include_packages = [
         'fakechroot',
         'fakeroot',
         'gdb',
@@ -86,9 +86,11 @@ def debootstrap1(chroot, arch, suite, **kwargs):
         'procps',
         'strace',
         'tmux',
-        'valgrind',
         'vim-tiny',
-    ))
+    ]
+    if arch != 'armel':
+        include_packages.append('valgrind')
+    include_packages = ','.join(include_packages)
     exclude_packages = ','.join((
         'binutils',
         'binutils-common',
