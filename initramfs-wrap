@@ -139,6 +139,7 @@ def get_exclude_paths(arch):
         '/usr/share/locale',
         '/usr/share/man',
         f'/usr/lib/{DEB2GNU.get(arch, arch)}-linux-gnu/gconv',
+        '/usr/include/valgrind',
     )
 
 
@@ -152,6 +153,8 @@ def configure_dpkg_exclude(chroot, arch, **kwargs):
 
 def prune_dpkg_exclude(chroot, arch, **kwargs):
     for exclude_path in get_exclude_paths(arch):
+        if not os.path.isdir(f'{chroot}/{exclude_path}'):
+            continue
         run_in_chroot(chroot, ['find', exclude_path, '-type', 'f', '-delete'])
 
 
