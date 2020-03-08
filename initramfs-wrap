@@ -143,6 +143,7 @@ def get_exclude_paths(arch):
         '/usr/share/locale',
         '/usr/share/man',
         f'/usr/lib/{DEB2GNU.get(arch, arch)}-linux-gnu/gconv',
+        f'/usr/lib/{DEB2GNU.get(arch, arch)}-linux-gnu/perl-base/unicore',
         '/usr/include/valgrind',
     )
 
