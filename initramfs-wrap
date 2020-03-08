@@ -311,6 +311,30 @@ def archive_output_img(path, exclude_expr):
         raise subprocess.CalledProcessError(retcode, tar_args)
 
 
+def remove_valgrind_tools(chroot, arch, **kwargs):
+    path = f'/usr/lib/{DEB2GNU.get(arch, arch)}-linux-gnu/valgrind'
+    tool_patterns = [
+        f'{path}/{name}-*-linux'
+        for name in (
+            'helgrind',
+            'callgrind',
+            'drd',
+            'massif',
+            'exp-sgcheck',
+            'cachegrind',
+            'exp-dhat',
+            'lackey',
+            'exp-bbv',
+            'none',
+        )
+    ]
+    run_in_chroot(chroot, [
+        'bash',
+        '-O', 'nullglob',
+        '-c', 'rm -f ' + ' '.join(tool_patterns),
+    ])
+
+
 def remove_apt(chroot, **kwargs):
     packages = [
         'apt',
@@ -370,6 +394,7 @@ INITRAMFS_SEQUENCE = (
     fixup_proc_dev,
     configure_hostname,
     add_extra_files,
+    remove_valgrind_tools,
     remove_apt,
     archive_output_initramfs,
 )
