@@ -411,6 +411,7 @@ INITRAMFS_SEQUENCE = (
     remove_valgrind_tools,
     remove_python_codecs,
     remove_apt,
+    remove_dpkg,
     archive_output_initramfs,
 )
 
