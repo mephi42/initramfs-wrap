@@ -87,20 +87,25 @@ def debootstrap1(chroot, arch, suite, **kwargs):
         'fakeroot',
         'gdb',
         'iproute2',
+        'less',
+        'nano',
         'procps',
         'strace',
         'tmux',
-        'vim-tiny',
     ]
     if arch != 'armel':
         include_packages.append('valgrind')
     include_packages = ','.join(include_packages)
     exclude_packages = ','.join((
+        'adduser',
         'binutils',
         'binutils-common',
         f'binutils-{DEB2GNU.get(arch, arch)}-linux-gnu',
+        'e2fsprogs',
         'iptables',
         'libbinutils',
+        'login',
+        'passwd',
         'rsyslog',
         'tzdata',
     ))
@@ -375,11 +380,8 @@ def remove_python_codecs(chroot, arch, **kwargs):
 def remove_apt(chroot, **kwargs):
     packages = [
         'apt',
-        'apt-utils',
-        'libapt-inst2.0',
+        'debian-archive-keyring',
         'libapt-pkg5.0',
-        'tasksel',
-        'tasksel-data',
     ]
     directories = [
         '/etc/apt',
@@ -398,7 +400,12 @@ def remove_dpkg(chroot, **kwargs):
         '/var/cache/debconf',
         '/var/lib/dpkg',
     ]
-    run_in_chroot(chroot, ['dpkg', '--purge', '--force-all'] + packages)
+    run_in_chroot(chroot, [
+        'dpkg',
+        '--purge',
+        '--force-remove-essential',
+        '--force-depends',
+    ] + packages)
     run_in_chroot(chroot, ['rm', '-r'] + directories)
 
 
@@ -468,6 +475,8 @@ if __name__ == '__main__':
     args = parser.parse_args()
     if args.v:
         logging.basicConfig(level=logging.DEBUG)
+    else:
+        logging.basicConfig(level=logging.INFO)
     if args.c is None:
         chroot = tempfile.mkdtemp(prefix=f'debootstrap-{args.a}-')
         logging.info('[*] Created %s', chroot)
