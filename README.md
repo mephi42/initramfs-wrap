@@ -21,9 +21,7 @@ The generated `initramfs-dbg.cpio.gz` will have the following structure:
 ```
 
 The contents of the original `initramfs.cpio.gz` will be placed under `orig`.
-After booting normally, you can log in as root without a password and make use
-of the debugging tools. Alternatively, you can boot with `rdinit=/bin/sh` and
-then do:
+After booting into a shell, you can start using the debugging tools, or just do:
 
 ```
 # exec chroot /orig /init
@@ -100,9 +98,6 @@ The intermediate results are cached in `~/.cache/initramfs-wrap`.
   bypassing `tmux`. Such scripts need to be adjusted.
 * Wrapped initramfs will consume ~256M extra RAM. If the system does not boot,
   try increasing QEMU RAM.
-* Sometimes kernel is stripped to such an extent, that systemd cannot start
-  (with `[!!!!!!] Failed to start up manager, freezing.` message). In this case
-  `rdinit=/bin/sh` is the only option.
 
 # Links
 

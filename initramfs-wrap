@@ -19,6 +19,10 @@ DEB2QEMU = {
     'armel': 'arm',
     'arm64': 'aarch64',
 }
+DEB2CONSOLE = {
+    'armel': '/dev/ttyAMA0',
+    'arm64': '/dev/ttyAMA0',
+}
 
 
 def get_binfmt_misc_interpreter(arch):
@@ -108,7 +112,7 @@ def debootstrap1(chroot, arch, suite, **kwargs):
         f'--cache-dir={cache}',
         '--foreign',
         f'--arch={arch}',
-        '--variant=fakechroot',
+        '--variant=minbase',
         f'--include={include_packages}',
         f'--exclude={exclude_packages}',
         suite,
@@ -165,6 +169,22 @@ def prune_dpkg_exclude(chroot, arch, **kwargs):
         run_in_chroot(chroot, ['find', exclude_path, '-type', 'f', '-delete'])
 
 
+def ldconfig_paths(chroot):
+    return (
+        '/sbin/ldconfig',
+        '/sbin/ldconfig.REAL',
+        os.path.join(chroot, 'etc', 'dpkg', 'dpkg.cfg.d', 'exclude-ldconfig'),
+    )
+
+
+def fake_ldconfig(chroot, **kwargs):
+    ldconfig, ldconfig_real, dpkg_config_path = ldconfig_paths(chroot)
+    with open(dpkg_config_path, 'w') as fp:
+        fp.write(f'path-exclude={ldconfig}\n')
+    run_in_chroot(chroot, ['mv', ldconfig, ldconfig_real])
+    run_in_chroot(chroot, ['ln', '-s', '/bin/true', ldconfig])
+
+
 def debootstrap2(chroot, **kwargs):
     run_in_chroot(chroot, ['/debootstrap/debootstrap', '--second-stage'])
 
@@ -199,6 +219,7 @@ CHROOT_SEQUENCE = (
     fixup_fakechroot,
     configure_dpkg_exclude,
     prune_dpkg_exclude,
+    fake_ldconfig,
     debootstrap2,
     fixup_fakechroot_again,
     fixup_symlinks,
@@ -243,10 +264,21 @@ def extract_input_initramfs(chroot, input_initramfs, **kwargs):
             raise Exception(f'{input_initramfs} is neither .gz nor .cpio file')
 
 
-def configure_init(chroot, **kwargs):
-    subprocess.check_call(host_fakeroot_command([
-        'ln', '-s', '/usr/lib/systemd/systemd', 'init',
-    ]), cwd=chroot)
+def configure_init(chroot, arch, **kwargs):
+    console = DEB2CONSOLE.get(arch, '/dev/console')
+    with tempfile.NamedTemporaryFile('w+') as fp:
+        fp.write(f'''#!/bin/sh
+mount -t devtmpfs devtmpfs /dev
+mount -t proc proc /proc
+mount -t sysfs sysfs /sys
+stty -F {console} sane
+exec setsid sh -c 'exec /bin/bash <>{console} 2>&1'
+''')
+        fp.flush()
+        fp.seek(0)
+        subprocess.check_call(host_fakeroot_command([
+            'sh', '-c', 'cat >init && chmod 755 init',
+        ]), stdin=fp, cwd=chroot)
 
 
 def configure_root(chroot, **kwargs):
@@ -254,15 +286,6 @@ def configure_root(chroot, **kwargs):
     subprocess.check_call(host_fakeroot_command([
         'sed', '-i', r's/root:\*:/root::/', shadow,
     ]))
-
-
-def fixup_proc_dev(chroot, **kwargs):
-    subprocess.check_call(host_fakeroot_command([
-        'rm', 'proc', 'dev',
-    ]), cwd=chroot)
-    subprocess.check_call(host_fakeroot_command([
-        'mkdir', 'proc', 'dev',
-    ]), cwd=chroot)
 
 
 def configure_hostname(chroot, **kwargs):
@@ -379,6 +402,12 @@ def remove_dpkg(chroot, **kwargs):
     run_in_chroot(chroot, ['rm', '-r'] + directories)
 
 
+def unfake_ldconfig(chroot, **kwargs):
+    ldconfig, ldconfig_real, dpkg_config_path = ldconfig_paths(chroot)
+    # dpkg_config_path is already removed by remove_dpkg
+    run_in_chroot(chroot, ['mv', ldconfig_real, ldconfig])
+
+
 def archive_output_initramfs(
         chroot, arch, output_initramfs, exclude, **kwargs):
     exclude_expr = make_exclude_expr(arch, exclude)
@@ -405,13 +434,13 @@ INITRAMFS_SEQUENCE = (
     extract_input_initramfs,
     configure_init,
     configure_root,
-    fixup_proc_dev,
     configure_hostname,
     add_extra_files,
     remove_valgrind_tools,
     remove_python_codecs,
     remove_apt,
     remove_dpkg,
+    unfake_ldconfig,
     archive_output_initramfs,
 )
 
