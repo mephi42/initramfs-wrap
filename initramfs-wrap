@@ -22,6 +22,7 @@ DEB2QEMU = {
 DEB2CONSOLE = {
     'armel': '/dev/ttyAMA0',
     'arm64': '/dev/ttyAMA0',
+    'mips': '/dev/ttyS0',
     's390x': '/dev/ttysclp0',
 }
 
@@ -392,10 +393,15 @@ def remove_apt(chroot, **kwargs):
         'debian-archive-keyring',
         'gpgv',
         'libapt-pkg5.0',
+        'libgmp10',
         'libgnutls30',
+        'libhogweed4',
         'libidn2-0',
         'libp11-kit0',
+        'libsemanage1',
+        'libsepol1',
         'libunistring2',
+        'libzstd1',
         'passwd',
     ]
     directories = [
