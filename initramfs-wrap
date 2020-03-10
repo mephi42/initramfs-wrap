@@ -22,6 +22,7 @@ DEB2QEMU = {
 DEB2CONSOLE = {
     'armel': '/dev/ttyAMA0',
     'arm64': '/dev/ttyAMA0',
+    's390x': '/dev/ttysclp0',
 }
 
 
@@ -375,14 +376,25 @@ def remove_python_codecs(chroot, arch, **kwargs):
     ])
 
 
+def remove_packages(chroot, **kwargs):
+    """Remove packages that cannot be excluded"""
+    packages = [
+        'e2fsprogs',
+        'libss2',
+    ]
+    run_in_chroot(chroot, ['dpkg', '--purge'] + packages)
+
+
 def remove_apt(chroot, **kwargs):
     packages = [
         'adduser',
         'apt',
         'debian-archive-keyring',
+        'gpgv',
         'libapt-pkg5.0',
         'libgnutls30',
         'libidn2-0',
+        'libp11-kit0',
         'libunistring2',
         'passwd',
     ]
@@ -394,6 +406,7 @@ def remove_apt(chroot, **kwargs):
 
 
 def remove_force(chroot, **kwargs):
+    """Remove packages that have dependents"""
     packages = [
         'libdb5.3',
         'libsqlite3-0',
@@ -460,6 +473,7 @@ INITRAMFS_SEQUENCE = (
     add_extra_files,
     remove_valgrind_tools,
     remove_python_codecs,
+    remove_packages,
     remove_apt,
     remove_force,
     remove_dpkg,

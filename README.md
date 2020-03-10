@@ -114,6 +114,13 @@ gzip -9 mips.cpio
 qemu-system-mips -M malta -m 256 -kernel boot/vmlinux-4.19.0-6-4kc-malta -initrd mips.cpio.gz -nographic
 ```
 
+* [s390x](https://www.debian.org/ports/s390/)
+
+```
+initramfs-wrap -a s390x -o s390x.cpio
+qemu-system-s390x -m 512 -kernel boot/vmlinuz-4.19.0-6-s390x -initrd s390x.cpio -nographic
+```
+
 # Random advice
 
 * Debugging with GDB requires Ctrl+C to be working, which in some setups might
