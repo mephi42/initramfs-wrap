@@ -62,6 +62,7 @@ def run_in_chroot(chroot, cmd):
         **os.environ,
         'QEMU_LD_PREFIX': chroot,
         'PATH': f'{chroot}/sbin:{chroot}/bin:{env_path}',
+        'DEBIAN_FRONTEND': 'noninteractive',
     })
 
 
@@ -97,15 +98,12 @@ def debootstrap1(chroot, arch, suite, **kwargs):
         include_packages.append('valgrind')
     include_packages = ','.join(include_packages)
     exclude_packages = ','.join((
-        'adduser',
         'binutils',
         'binutils-common',
         f'binutils-{DEB2GNU.get(arch, arch)}-linux-gnu',
-        'e2fsprogs',
         'iptables',
         'libbinutils',
         'login',
-        'passwd',
         'rsyslog',
         'tzdata',
     ))
@@ -379,9 +377,11 @@ def remove_python_codecs(chroot, arch, **kwargs):
 
 def remove_apt(chroot, **kwargs):
     packages = [
+        'adduser',
         'apt',
         'debian-archive-keyring',
         'libapt-pkg5.0',
+        'passwd',
     ]
     directories = [
         '/etc/apt',
