@@ -7,9 +7,9 @@ is for a foreign architecture.
 
 ```
 $ initramfs-wrap \
-      -a arm64 \
-      -i initramfs.cpio.gz \
-      -o initramfs-dbg.cpio.gz
+        -a arm64 \
+        -i initramfs.cpio.gz \
+        -o initramfs-dbg.cpio.gz
 ```
 
 The generated `initramfs-dbg.cpio.gz` will have the following structure:
@@ -79,16 +79,40 @@ older versions will choke on symlink loops and get stuck with 100% CPU usage.
 example, my Ubuntu 19.10 has `4.0.0`) and then build and install `4.1.0` on top:
 
 ```
-$ make -f Makefile.qemu -j$(getconf _NPROCESSORS_ONLN)
-$ sudo update-binfmts --disable qemu-$ARCH
-$ sudo rm /usr/bin/qemu-$ARCH-static
-$ sudo cp qemu-4.1.0/bin/qemu-$ARCH-static /usr/bin/
-$ sudo update-binfmts --enable qemu-$ARCH
+make -f Makefile.qemu -j$(getconf _NPROCESSORS_ONLN)
+sudo update-binfmts --disable qemu-$ARCH
+sudo rm /usr/bin/qemu-$ARCH-static
+sudo cp qemu-4.1.0/bin/qemu-$ARCH-static /usr/bin/
+sudo update-binfmts --enable qemu-$ARCH
 ```
 
 # Cleanup
 
 The intermediate results are cached in `~/.cache/initramfs-wrap`.
+
+# Architectures
+
+* [armel](https://wiki.debian.org/ArmEabiPort)
+
+```
+initramfs-wrap -a armel -o armel.cpio
+qemu-system-arm -M virt -m 512 -kernel boot/vmlinuz-4.19.0-6-armmp-lpae -initrd armel.cpio -nographic
+```
+
+* [arm64](https://wiki.debian.org/Arm64Port)
+
+```
+initramfs-wrap -a arm64 -o arm64.cpio
+qemu-system-aarch64 -M virt -cpu cortex-a57 -m 512 -kernel boot/vmlinuz-4.19.0-6-arm64 -initrd arm64.cpio -nographic
+```
+
+* [mips](https://wiki.debian.org/MIPSPort)
+
+```
+initramfs-wrap -a mips -o mips.cpio -u stable
+gzip -9 mips.cpio
+qemu-system-mips -M malta -m 256 -kernel boot/vmlinux-4.19.0-6-4kc-malta -initrd mips.cpio.gz -nographic
+```
 
 # Random advice
 

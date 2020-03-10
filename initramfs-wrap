@@ -381,6 +381,9 @@ def remove_apt(chroot, **kwargs):
         'apt',
         'debian-archive-keyring',
         'libapt-pkg5.0',
+        'libgnutls30',
+        'libidn2-0',
+        'libunistring2',
         'passwd',
     ]
     directories = [
@@ -388,6 +391,18 @@ def remove_apt(chroot, **kwargs):
     ]
     run_in_chroot(chroot, ['dpkg', '--purge'] + packages)
     run_in_chroot(chroot, ['rm', '-r'] + directories)
+
+
+def remove_force(chroot, **kwargs):
+    packages = [
+        'libdb5.3',
+        'libsqlite3-0',
+    ]
+    run_in_chroot(chroot, [
+        'dpkg',
+        '--purge',
+        '--force-depends',
+    ] + packages)
 
 
 def remove_dpkg(chroot, **kwargs):
@@ -446,6 +461,7 @@ INITRAMFS_SEQUENCE = (
     remove_valgrind_tools,
     remove_python_codecs,
     remove_apt,
+    remove_force,
     remove_dpkg,
     unfake_ldconfig,
     archive_output_initramfs,
