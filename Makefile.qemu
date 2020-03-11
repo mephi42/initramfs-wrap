@@ -4,8 +4,10 @@ CONFIGURE_FLAGS=\
 		--disable-system \
 		--disable-tools \
 		--static \
-		--enable-debug-info
+		--enable-debug-info \
+		--disable-strip
 
+.PHONY: all
 all: qemu-$(VERSION)/bin/qemu-x86_64-static
 
 qemu-$(VERSION)/bin/qemu-x86_64-static: qemu-$(VERSION)/config.status
@@ -21,3 +23,16 @@ qemu-$(VERSION)/configure: qemu-$(VERSION).tar.xz
 
 qemu-$(VERSION).tar.xz:
 		curl -o qemu-$(VERSION).tar.xz https://download.qemu.org/qemu-$(VERSION).tar.xz
+
+install-%:
+		update-binfmts --disable qemu-$*
+		rm /usr/bin/qemu-$*-static
+		cp qemu-$(VERSION)/bin/qemu-$*-static /usr/bin/
+		update-binfmts --enable qemu-$*
+
+install: \
+		install-aarch64 \
+		install-arm \
+		install-mips \
+		install-ppc64le \
+		install-s390x

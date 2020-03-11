@@ -40,19 +40,27 @@ class TestInitramfsWrap(unittest.TestCase):
     def _test_arch(self, arch):
         env_path = self.basedir + os.pathsep + os.environ['PATH']
         with tempfile.TemporaryDirectory() as tmpdir:
+            cache_dir = os.path.join(tmpdir, 'cache')
             commands = self.arches[arch]
             for i, command in enumerate(commands):
                 child = pexpect.spawn(
                     command,
-                    timeout=180,
+                    timeout=240,
                     logfile=sys.stdout.buffer,
                     cwd=tmpdir,
-                    env={**os.environ, 'PATH': env_path},
+                    env={
+                        **os.environ,
+                        'PATH': env_path,
+                        'INITRAMFS_WRAP_CACHE_DIR': cache_dir,
+                    },
                 )
                 if i == len(commands) - 1:
                     child.expect_exact('root@(none):/#')
                     child.kill(signal.SIGTERM)
                 child.expect(pexpect.EOF)
+                child.close()
+                self.assertTrue(os.WIFEXITED(child.status))
+                self.assertEqual(0, os.WEXITSTATUS(child.status))
 
     def test_armhf(self):
         self._test_arch('armhf')
@@ -65,6 +73,9 @@ class TestInitramfsWrap(unittest.TestCase):
 
     def test_s390x(self):
         self._test_arch('s390x')
+
+    def test_ppc64el(self):
+        self._test_arch('ppc64el')
 
 
 if __name__ == '__main__':

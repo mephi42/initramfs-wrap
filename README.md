@@ -80,10 +80,7 @@ example, my Ubuntu 19.10 has `4.0.0`) and then build and install `4.1.0` on top:
 
 ```
 make -f Makefile.qemu -j$(getconf _NPROCESSORS_ONLN)
-sudo update-binfmts --disable qemu-$ARCH
-sudo rm /usr/bin/qemu-$ARCH-static
-sudo cp qemu-4.1.0/bin/qemu-$ARCH-static /usr/bin/
-sudo update-binfmts --enable qemu-$ARCH
+sudo make -f Makefile.qemu install-$ARCH
 ```
 
 # Cleanup
@@ -113,7 +110,7 @@ qemu-system-aarch64 -M virt -cpu cortex-a57 -m 256 -kernel linux -initrd arm64.c
 
 ```
 wget http://ftp.debian.org/debian/dists/stable/main/installer-mips/current/images/malta/netboot/vmlinux-4.19.0-8-4kc-malta
-initramfs-wrap -a mips -o mips.cpio.gz -u stable
+initramfs-wrap -a mips -o mips.cpio.gz
 qemu-system-mips -M malta -m 256 -kernel vmlinux-4.19.0-8-4kc-malta -initrd mips.cpio.gz -nographic
 ```
 
@@ -123,6 +120,14 @@ qemu-system-mips -M malta -m 256 -kernel vmlinux-4.19.0-8-4kc-malta -initrd mips
 wget http://ftp.debian.org/debian/dists/stable/main/installer-s390x/current/images/generic/kernel.debian
 initramfs-wrap -a s390x -o s390x.cpio.gz
 qemu-system-s390x -m 256 -kernel kernel.debian -initrd s390x.cpio.gz -nographic
+```
+
+* [ppc64el](https://wiki.debian.org/ppc64el)
+
+```
+wget http://ftp.debian.org/debian/dists/stable/main/installer-ppc64el/current/images/netboot/debian-installer/ppc64el/vmlinux
+initramfs-wrap -a ppc64el -o ppc64el.cpio.gz
+qemu-system-ppc64le -m 768 -kernel vmlinux -initrd ppc64el.cpio.gz -nographic -vga none
 ```
 
 # Random advice

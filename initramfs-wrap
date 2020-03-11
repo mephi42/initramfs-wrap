@@ -27,6 +27,7 @@ DEB2CONSOLE = {
     'armhf': '/dev/ttyAMA0',
     'arm64': '/dev/ttyAMA0',
     'mips': '/dev/ttyS0',
+    'ppc64el': '/dev/hvc0',
     's390x': '/dev/ttysclp0',
 }
 
@@ -54,11 +55,18 @@ def run_in_chroot(chroot, cmd):
     fakechroot = f'{chroot}/bin/fakechroot'
     libfakechroot, = glob(f'{chroot}/usr/lib/*/fakechroot/libfakechroot.so')
     args = [
+        # Guest shell (thanks to $PATH).
         'sh',
+        # Preload guest libfakechroot.
         fakechroot,
         '-l', libfakechroot,
+        # Guest chroot (thanks to $PATH).
         'chroot',
         chroot,
+        # Don't look for binaries in host directories.
+        'env',
+        'PATH=/usr/sbin:/usr/bin:/sbin:/bin',
+        # Preload guest libfakeroot.
         'fakeroot-sysv',
         '-i', '/fakeroot-state',
         '-s', '/fakeroot-state',
@@ -66,14 +74,16 @@ def run_in_chroot(chroot, cmd):
     args.extend(cmd)
     subprocess.check_call(args, env={
         **os.environ,
+        # This is only to find .interp.
+        # qemu-user is not affected by fakechroot and fakeroot.
         'QEMU_LD_PREFIX': chroot,
         'PATH': f'{chroot}/sbin:{chroot}/bin:{env_path}',
         'DEBIAN_FRONTEND': 'noninteractive',
     })
 
 
-def get_chroot_archive(arch, suite):
-    return os.path.expanduser(f'~/.cache/initramfs-wrap/{arch}-{suite}.tar.gz')
+def get_chroot_archive(cache_dir, arch, suite):
+    return os.path.join(cache_dir, f'{arch}-{suite}.tar.gz')
 
 
 def host_fakeroot_command(args):
@@ -86,8 +96,8 @@ def host_fakeroot_command(args):
     return result
 
 
-def debootstrap1(chroot, arch, suite, **kwargs):
-    cache = os.path.expanduser('~/.cache/initramfs-wrap/debootstrap')
+def debootstrap1(chroot, arch, suite, cache_dir, **kwargs):
+    cache = os.path.join(cache_dir, 'debootstrap')
     os.makedirs(cache, exist_ok=True)
     include_packages = [
         'fakechroot',
@@ -202,8 +212,58 @@ def fake_ldconfig(chroot, **kwargs):
     ldconfig, ldconfig_real, dpkg_config_path = ldconfig_paths(chroot)
     with open(dpkg_config_path, 'w') as fp:
         fp.write(f'path-exclude={ldconfig}\n')
-    run_in_chroot(chroot, ['mv', ldconfig, ldconfig_real])
-    run_in_chroot(chroot, ['ln', '-s', '/bin/true', ldconfig])
+    subprocess.check_call(host_fakeroot_command(
+        ['mv', f'{chroot}/{ldconfig}', f'{chroot}/{ldconfig_real}']))
+    target = os.path.relpath('/bin/true', os.path.dirname(ldconfig))
+    subprocess.check_call(host_fakeroot_command(
+        ['ln', '-s', target, f'{chroot}/{ldconfig}']))
+
+
+def allow_host_paths_in_chroot(chroot, **kwargs):
+    # In theory, guest programs, by virtue of running inside fakechroot, make
+    # requests that reference chroot paths, which get translated to host paths
+    # and passed to qemu-user. Unfortunately, leaks happen (e.g. through
+    # environment variables) and sometimes guest programs try to access host
+    # paths, which are then mangled by fakechroot into abominations like
+    # /tmp/debootstrap-ppc64el-j0evkja8/tmp/debootstrap-ppc64el-j0evkja8/bin/sh.
+    # It is, of course, possible to catch and fix such occurrences one by one.
+    # But a more pragmatic approach is to create a symlink, which would
+    # redirect such accesses back to a chroot. Using a relative path as a
+    # target makes such symlinks work both inside and outside of a chroot.
+    dst = f'{chroot}/{chroot}'
+    src = os.path.relpath(chroot, os.path.dirname(dst))
+    subprocess.check_call(host_fakeroot_command(['ln', '-s', src, dst]))
+
+
+def relativize_symlinks(chroot, **kwargs):
+    # debootstrap chroot might contain symlinks with absolute targets.
+    # Sometimes qemu-user resolves them relative to $QEMU_LD_PREFIX, sometimes
+    # (most notably, for .interp) it just uses the target as a host path.
+    # Relativize all symlinks in order to make life easier.
+    script = '''import os
+import sys
+
+symlink, = sys.argv[1:]
+target = os.readlink(symlink)
+root = '../' * (sum(1 for c in symlink if c == '/') - 1)
+os.unlink(symlink)
+os.symlink(root + target[1:], symlink)
+'''
+    subprocess.check_call(host_fakeroot_command([
+        'find',
+        '.',
+        '-lname', '/*',
+        '-exec', 'python3', '-c', script, '{}', ';',
+    ]), cwd=chroot)
+
+
+def touch_ld_so_cache(chroot, **kwargs):
+    # If there is no /etc/ld.so.cache in a deboostrap chroot, ld.so might try
+    # to access the host one, with catastrophic consequences.
+    subprocess.check_call(host_fakeroot_command([
+        'touch',
+        f'{chroot}/etc/ld.so.cache',
+    ]))
 
 
 def debootstrap2(chroot, **kwargs):
@@ -214,21 +274,15 @@ def fixup_fakechroot_again(chroot, **kwargs):
     fixup_fakechroot(chroot, **kwargs)
 
 
-def fixup_symlinks(chroot, **kwargs):
-    ln = f'ln -fsT "$(readlink "$0" | cut -c{len(chroot) + 1}-)" $0'
-    subprocess.check_call(host_fakeroot_command([
-        'find',
-        '.',
-        '-lname', os.path.join(chroot, '*'),
-        '-exec', 'sh', '-c', ln, '{}', ';',
-    ]), cwd=chroot)
+def relativize_symlinks_again(chroot, **kwargs):
+    relativize_symlinks(chroot, **kwargs)
 
 
-def archive_chroot(chroot, arch, suite, **kwargs):
+def archive_chroot(chroot, arch, suite, cache_dir, **kwargs):
     subprocess.check_call(host_fakeroot_command([
         'tar',
         '-C', chroot,
-        '-czf', get_chroot_archive(arch, suite),
+        '-czf', get_chroot_archive(cache_dir, arch, suite),
         '.',
     ]))
 
@@ -241,20 +295,23 @@ CHROOT_SEQUENCE = (
     configure_dpkg_exclude,
     prune_dpkg_exclude,
     fake_ldconfig,
+    allow_host_paths_in_chroot,
+    relativize_symlinks,
+    touch_ld_so_cache,
     debootstrap2,
     fixup_fakechroot_again,
-    fixup_symlinks,
+    relativize_symlinks_again,
     archive_chroot,
 )
 
 
-def extract_chroot(chroot, arch, suite, **kwargs):
+def extract_chroot(chroot, arch, suite, cache_dir, **kwargs):
     subprocess.check_call([
         'fakeroot',
         '-s', os.path.join(chroot, 'fakeroot-state'),
         'tar',
         '-C', chroot,
-        '-xzf', get_chroot_archive(arch, suite),
+        '-xzf', get_chroot_archive(cache_dir, arch, suite),
     ])
 
 
@@ -526,8 +583,15 @@ if __name__ == '__main__':
     parser.add_argument(
         '-k', action='store_true', help='Keep intermediate chroot')
     parser.add_argument('-o', required=True, help='Output initramfs')
+    parser.add_argument(
+        '--cache-dir',
+        help='Cache directory',
+        default=os.getenv(
+            'INITRAMFS_WRAP_CACHE_DIR',
+            os.path.expanduser('~/.cache/initramfs-wrap')),
+    )
     parser.add_argument('-s', help='Step to execute')
-    parser.add_argument('-u', help='Suite', default='testing')
+    parser.add_argument('-u', help='Suite', default='buster')
     parser.add_argument('-v', action='store_true', help='Verbose output')
     parser.add_argument('-x', action='append', help='Extra paths to exclude')
     args = parser.parse_args()
@@ -544,7 +608,8 @@ if __name__ == '__main__':
     try:
         if (args.f or
                 is_in_sequence(args.s, CHROOT_SEQUENCE) or
-                not os.path.exists(get_chroot_archive(args.a, args.u))):
+                not os.path.exists(get_chroot_archive(
+                    args.cache_dir, args.a, args.u))):
             for chroot_step in CHROOT_SEQUENCE:
                 if args.s is None or args.s == chroot_step.__name__:
                     logging.info('[*] %s', chroot_step.__name__)
@@ -552,6 +617,7 @@ if __name__ == '__main__':
                         chroot=chroot,
                         arch=args.a,
                         suite=args.u,
+                        cache_dir=args.cache_dir,
                     )
         for initramfs_step in INITRAMFS_SEQUENCE:
             if args.s is None or args.s == initramfs_step.__name__:
@@ -564,6 +630,7 @@ if __name__ == '__main__':
                     output_initramfs=args.o,
                     extra_files=args.d,
                     exclude=args.x,
+                    cache_dir=args.cache_dir,
                 )
     finally:
         if args.c is None and not args.k:

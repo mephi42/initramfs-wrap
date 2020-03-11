@@ -1,2 +1,4 @@
 debootstrap-*
 .idea/
+qemu-*/
+qemu-*.tar.xz
