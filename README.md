@@ -95,30 +95,30 @@ The intermediate results are cached in `~/.cache/initramfs-wrap`.
 * [armel](https://wiki.debian.org/ArmEabiPort)
 
 ```
-initramfs-wrap -a armel -o armel.cpio
-qemu-system-arm -M virt -m 512 -kernel boot/vmlinuz-4.19.0-6-armmp-lpae -initrd armel.cpio -nographic
+initramfs-wrap -a armel -o armel.cpio.gz
+qemu-system-arm -M virt -m 256 -kernel boot/vmlinuz-4.19.0-6-armmp-lpae -initrd armel.cpio.gz -nographic
 ```
 
 * [arm64](https://wiki.debian.org/Arm64Port)
 
 ```
 initramfs-wrap -a arm64 -o arm64.cpio
-qemu-system-aarch64 -M virt -cpu cortex-a57 -m 512 -kernel boot/vmlinuz-4.19.0-6-arm64 -initrd arm64.cpio -nographic
+xz -9 --check=crc32 arm64.cpio
+qemu-system-aarch64 -M virt -cpu cortex-a57 -m 256 -kernel boot/vmlinuz-4.19.0-6-arm64 -initrd arm64.cpio.xz -nographic -append "cma=4M"
 ```
 
 * [mips](https://wiki.debian.org/MIPSPort)
 
 ```
-initramfs-wrap -a mips -o mips.cpio -u stable
-gzip -9 mips.cpio
+initramfs-wrap -a mips -o mips.cpio.gz -u stable
 qemu-system-mips -M malta -m 256 -kernel boot/vmlinux-4.19.0-6-4kc-malta -initrd mips.cpio.gz -nographic
 ```
 
 * [s390x](https://www.debian.org/ports/s390/)
 
 ```
-initramfs-wrap -a s390x -o s390x.cpio
-qemu-system-s390x -m 512 -kernel boot/vmlinuz-4.19.0-6-s390x -initrd s390x.cpio -nographic
+initramfs-wrap -a s390x -o s390x.cpio.gz
+qemu-system-s390x -m 256 -kernel boot/vmlinuz-4.19.0-6-s390x -initrd s390x.cpio.gz -nographic
 ```
 
 # Random advice
@@ -127,8 +127,10 @@ qemu-system-s390x -m 512 -kernel boot/vmlinuz-4.19.0-6-s390x -initrd s390x.cpio 
   kill QEMU. [Here is the fix](https://stackoverflow.com/a/49751144).
 * Some scripts in the original initramfs might access `/dev/console` directly,
   bypassing `tmux`. Such scripts need to be adjusted.
-* Wrapped initramfs will consume ~256M extra RAM. If the system does not boot,
-  try increasing QEMU RAM.
+* Wrapped initramfs will consume some RAM. A total RAM size of 256MiB should be
+  sufficient (since this is the upper bound for MIPS), however, if the system
+  does not boot with `Initramfs unpacking failed: write error`, try increasing
+  RAM size.
 
 # Links
 

@@ -20,6 +20,8 @@ DEB2QEMU = {
     'arm64': 'aarch64',
     'ppc64el': 'ppc64le',
 }
+# Queryable via /sys/class/tty/console/active, but it's better to support
+# kernels without CONFIG_SYSFS.
 DEB2CONSOLE = {
     'armel': '/dev/ttyAMA0',
     'arm64': '/dev/ttyAMA0',
@@ -397,9 +399,11 @@ def remove_apt(chroot, **kwargs):
         'debian-archive-keyring',
         'gpgv',
         'libapt-pkg5.0',
+        'libapt-pkg6.0',
         'libgmp10',
         'libgnutls30',
         'libhogweed4',
+        'libhogweed5',
         'libidn2-0',
         'libnettle6',
         'libp11-kit0',
@@ -467,7 +471,7 @@ def archive_output_initramfs(
     p = subprocess.Popen(
         args, stdout=subprocess.PIPE, cwd=chroot)
     if output_initramfs.endswith('.gz'):
-        fp = gzip.open(output_initramfs, 'wb', 1)
+        fp = gzip.open(output_initramfs, 'wb', 6)
     else:
         fp = open(output_initramfs, 'wb')
     with fp:
