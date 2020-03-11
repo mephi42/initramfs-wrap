@@ -5,6 +5,7 @@ import gzip
 import logging
 import os
 import platform
+import re
 import shutil
 import subprocess
 import tempfile
@@ -126,8 +127,20 @@ def debootstrap1(chroot, arch, suite, **kwargs):
     ])
 
 
+def check_qemu_version(qemu_path):
+    version = subprocess.check_output([qemu_path, '--version']).decode()
+    m = re.match(r'^qemu-.* version (\d+).(\d+).(\d+)', version)
+    if m is None:
+        raise Exception(f'Could not determine qemu version: {version}')
+    major, minor, patch = map(int, m.groups())
+    if (major, minor, patch) < (4, 1, 0):
+        raise Exception(
+            f'{qemu_path} is too old, please upgrade to at least v4.1.0')
+
+
 def copy_qemu_user_static(chroot, arch, **kwargs):
     qemu_path = get_binfmt_misc_interpreter(arch)
+    check_qemu_version(qemu_path)
     if qemu_path is not None:
         shutil.copy(qemu_path, chroot + qemu_path)
 
