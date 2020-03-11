@@ -11,19 +11,19 @@ import tempfile
 
 DEB2GNU = {
     'amd64': 'x86_64',
-    'armel': 'arm',
+    'armhf': 'arm',
     'arm64': 'aarch64',
 }
 DEB2QEMU = {
     'amd64': 'x86_64',
-    'armel': 'arm',
+    'armhf': 'arm',
     'arm64': 'aarch64',
     'ppc64el': 'ppc64le',
 }
 # Queryable via /sys/class/tty/console/active, but it's better to support
 # kernels without CONFIG_SYSFS.
 DEB2CONSOLE = {
-    'armel': '/dev/ttyAMA0',
+    'armhf': '/dev/ttyAMA0',
     'arm64': '/dev/ttyAMA0',
     'mips': '/dev/ttyS0',
     's390x': '/dev/ttysclp0',
@@ -99,8 +99,6 @@ def debootstrap1(chroot, arch, suite, **kwargs):
         'strace',
         'tmux',
     ]
-    if arch != 'armel':
-        include_packages.append('valgrind')
     include_packages = ','.join(include_packages)
     exclude_packages = ','.join((
         'binutils',

@@ -92,33 +92,37 @@ The intermediate results are cached in `~/.cache/initramfs-wrap`.
 
 # Architectures
 
-* [armel](https://wiki.debian.org/ArmEabiPort)
+* [armhf](https://wiki.debian.org/ArmHardFloatPort)
 
 ```
-initramfs-wrap -a armel -o armel.cpio.gz
-qemu-system-arm -M virt -m 256 -kernel boot/vmlinuz-4.19.0-6-armmp-lpae -initrd armel.cpio.gz -nographic
+wget http://ftp.debian.org/debian/dists/stable/main/installer-armhf/current/images/netboot/vmlinuz
+initramfs-wrap -a armhf -o armhf.cpio.gz
+qemu-system-arm -M virt -m 256 -kernel vmlinuz -initrd armhf.cpio.gz -nographic
 ```
 
 * [arm64](https://wiki.debian.org/Arm64Port)
 
 ```
+wget http://ftp.debian.org/debian/dists/stable/main/installer-arm64/current/images/netboot/debian-installer/arm64/linux
 initramfs-wrap -a arm64 -o arm64.cpio
 xz -9 --check=crc32 arm64.cpio
-qemu-system-aarch64 -M virt -cpu cortex-a57 -m 256 -kernel boot/vmlinuz-4.19.0-6-arm64 -initrd arm64.cpio.xz -nographic -append "cma=4M"
+qemu-system-aarch64 -M virt -cpu cortex-a57 -m 256 -kernel linux -initrd arm64.cpio.xz -nographic -append "cma=4M"
 ```
 
 * [mips](https://wiki.debian.org/MIPSPort)
 
 ```
+wget http://ftp.debian.org/debian/dists/stable/main/installer-mips/current/images/malta/netboot/vmlinux-4.19.0-8-4kc-malta
 initramfs-wrap -a mips -o mips.cpio.gz -u stable
-qemu-system-mips -M malta -m 256 -kernel boot/vmlinux-4.19.0-6-4kc-malta -initrd mips.cpio.gz -nographic
+qemu-system-mips -M malta -m 256 -kernel vmlinux-4.19.0-8-4kc-malta -initrd mips.cpio.gz -nographic
 ```
 
 * [s390x](https://www.debian.org/ports/s390/)
 
 ```
+wget http://ftp.debian.org/debian/dists/stable/main/installer-s390x/current/images/generic/kernel.debian
 initramfs-wrap -a s390x -o s390x.cpio.gz
-qemu-system-s390x -m 256 -kernel boot/vmlinuz-4.19.0-6-s390x -initrd s390x.cpio.gz -nographic
+qemu-system-s390x -m 256 -kernel kernel.debian -initrd s390x.cpio.gz -nographic
 ```
 
 # Random advice
