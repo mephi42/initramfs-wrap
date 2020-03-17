@@ -84,6 +84,9 @@ class TestInitramfsWrap(unittest.TestCase):
     def test_amd64(self):
         self._test_arch('amd64')
 
+    def test_i386(self):
+        self._test_arch('i386')
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -15,6 +15,7 @@ DEB2GNU = {
     'armhf': 'arm',
     'arm64': 'aarch64',
 }
+GNU2DEB = {v: k for k, v in DEB2GNU.items()}
 DEB2QEMU = {
     'amd64': 'x86_64',
     'armhf': 'arm',
@@ -31,10 +32,15 @@ DEB2CONSOLE = {
     'ppc64el': '/dev/hvc0',
     's390x': '/dev/ttysclp0',
 }
+DEB2COMPATIBLE = {
+    'amd64': ['i386'],
+}
 
 
 def get_binfmt_misc_interpreter(arch):
-    if platform.machine() == DEB2GNU.get(arch, arch):
+    current_arch_gnu = platform.machine()
+    current_arch = GNU2DEB.get(current_arch_gnu, current_arch_gnu)
+    if arch in [current_arch] + DEB2COMPATIBLE.get(current_arch, []):
         return None
     qemu_arch = DEB2QEMU.get(arch, arch)
     with open(f'/proc/sys/fs/binfmt_misc/qemu-{qemu_arch}') as fp:

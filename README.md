@@ -138,6 +138,14 @@ initramfs-wrap -a amd64 -o amd64.cpio.gz
 qemu-system-x86_64 -m 256 -kernel linux -initrd amd64.cpio.gz -nographic -append 'console=ttyS0'
 ```
 
+* [i386](https://www.debian.org/ports/i386/)
+
+```
+wget http://ftp.debian.org/debian/dists/stable/main/installer-i386/current/images/netboot/debian-installer/i386/linux
+initramfs-wrap -a i386 -o i386.cpio.gz
+qemu-system-i386 -m 256 -kernel linux -initrd i386.cpio.gz -nographic -append 'console=ttyS0'
+```
+
 # Random advice
 
 * Debugging with GDB requires Ctrl+C to be working, which in some setups might
