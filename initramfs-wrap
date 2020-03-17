@@ -24,6 +24,7 @@ DEB2QEMU = {
 # Queryable via /sys/class/tty/console/active, but it's better to support
 # kernels without CONFIG_SYSFS.
 DEB2CONSOLE = {
+    'amd64': '/dev/ttyS0',
     'armhf': '/dev/ttyAMA0',
     'arm64': '/dev/ttyAMA0',
     'mips': '/dev/ttyS0',
@@ -150,8 +151,8 @@ def check_qemu_version(qemu_path):
 
 def copy_qemu_user_static(chroot, arch, **kwargs):
     qemu_path = get_binfmt_misc_interpreter(arch)
-    check_qemu_version(qemu_path)
     if qemu_path is not None:
+        check_qemu_version(qemu_path)
         shutil.copy(qemu_path, chroot + qemu_path)
 
 

@@ -45,7 +45,7 @@ class TestInitramfsWrap(unittest.TestCase):
             for i, command in enumerate(commands):
                 child = pexpect.spawn(
                     command,
-                    timeout=240,
+                    timeout=300,
                     logfile=sys.stdout.buffer,
                     cwd=tmpdir,
                     env={
@@ -55,7 +55,11 @@ class TestInitramfsWrap(unittest.TestCase):
                     },
                 )
                 if i == len(commands) - 1:
-                    child.expect_exact('root@(none):/#')
+                    prompt = 'root@(none):/#'
+                    child.expect_exact(prompt)
+                    child.sendline('strace /bin/true')
+                    child.expect_exact('+++ exited with 0 +++')
+                    child.expect_exact(prompt)
                     child.kill(signal.SIGTERM)
                 child.expect(pexpect.EOF)
                 child.close()
@@ -76,6 +80,9 @@ class TestInitramfsWrap(unittest.TestCase):
 
     def test_ppc64el(self):
         self._test_arch('ppc64el')
+
+    def test_amd64(self):
+        self._test_arch('amd64')
 
 
 if __name__ == '__main__':

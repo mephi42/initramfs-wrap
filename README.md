@@ -12,11 +12,11 @@ $ initramfs-wrap \
         -o initramfs-dbg.cpio.gz
 ```
 
-The generated `initramfs-dbg.cpio.gz` will have the following structure:
+The generated `initramfs-dbg.cpio.gz` will have roughly the following structure:
 
 ```
 ├── bin
-├── init -> /usr/lib/systemd/systemd
+├── init
 └── orig
 ```
 
@@ -103,7 +103,7 @@ qemu-system-arm -M virt -m 256 -kernel vmlinuz -initrd armhf.cpio.gz -nographic
 wget http://ftp.debian.org/debian/dists/stable/main/installer-arm64/current/images/netboot/debian-installer/arm64/linux
 initramfs-wrap -a arm64 -o arm64.cpio
 xz -9 --check=crc32 arm64.cpio
-qemu-system-aarch64 -M virt -cpu cortex-a57 -m 256 -kernel linux -initrd arm64.cpio.xz -nographic -append "cma=4M"
+qemu-system-aarch64 -M virt -cpu cortex-a57 -m 256 -kernel linux -initrd arm64.cpio.xz -nographic -append 'cma=4M'
 ```
 
 * [mips](https://wiki.debian.org/MIPSPort)
@@ -128,6 +128,14 @@ qemu-system-s390x -m 256 -kernel kernel.debian -initrd s390x.cpio.gz -nographic
 wget http://ftp.debian.org/debian/dists/stable/main/installer-ppc64el/current/images/netboot/debian-installer/ppc64el/vmlinux
 initramfs-wrap -a ppc64el -o ppc64el.cpio.gz
 qemu-system-ppc64le -m 768 -kernel vmlinux -initrd ppc64el.cpio.gz -nographic -vga none
+```
+
+* [amd64](https://www.debian.org/ports/amd64/)
+
+```
+wget http://ftp.debian.org/debian/dists/stable/main/installer-amd64/current/images/netboot/debian-installer/amd64/linux
+initramfs-wrap -a amd64 -o amd64.cpio.gz
+qemu-system-x86_64 -m 256 -kernel linux -initrd amd64.cpio.gz -nographic -append 'console=ttyS0'
 ```
 
 # Random advice
