@@ -104,10 +104,12 @@ def debootstrap1(chroot, arch, suite, cache_dir, **kwargs):
         'fakechroot',
         'fakeroot',
         'gdb',
+        'gdbserver',
         'iproute2',
         'less',
         'nano',
         'procps',
+        'socat',
         'strace',
         'tmux',
     ]
