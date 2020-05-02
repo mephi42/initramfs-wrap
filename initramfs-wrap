@@ -380,6 +380,8 @@ def add_extra_files(chroot, extra_files, **kwargs):
             src, dst = spec.split(':')
             real_dst = f'{chroot}{dst}'
             shutil.copyfile(src, real_dst)
+            st = os.stat(src)
+            os.chmod(real_dst, st.st_mode)
 
 
 def make_exclude_expr(arch, exclude):
