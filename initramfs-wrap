@@ -10,27 +10,16 @@ import shutil
 import subprocess
 import tempfile
 
-DEB2GNU = {
-    'amd64': 'x86_64',
-    'armhf': 'arm',
-    'arm64': 'aarch64',
-}
-DEB2QEMU = {
-    'amd64': 'x86_64',
-    'armhf': 'arm',
-    'arm64': 'aarch64',
-    'ppc64el': 'ppc64le',
-}
-# Queryable via /sys/class/tty/console/active, but it's better to support
-# kernels without CONFIG_SYSFS.
-DEB2CONSOLE = {
-    'amd64': '/dev/ttyS0',
-    'armhf': '/dev/ttyAMA0',
-    'arm64': '/dev/ttyAMA0',
-    'mips': '/dev/ttyS0',
-    'ppc64el': '/dev/hvc0',
-    's390x': '/dev/ttysclp0',
-}
+from initramfs_wrap import DEB2GNU, DEB2QEMU, DEB2CONSOLE, \
+    debootstrap_stage1, default_cache_dir
+
+
+def debootstrap1(chroot, arch, suite, cache_dir, **kwargs):
+    extra_packages = [
+        'fakechroot',
+        'fakeroot',
+    ]
+    debootstrap_stage1(chroot, arch, suite, cache_dir, extra_packages)
 
 
 def get_binfmt_misc_interpreter(arch):
@@ -95,49 +84,6 @@ def host_fakeroot_command(args):
     ]
     result.extend(args)
     return result
-
-
-def debootstrap1(chroot, arch, suite, cache_dir, **kwargs):
-    cache = os.path.join(cache_dir, 'debootstrap')
-    os.makedirs(cache, exist_ok=True)
-    include_packages = [
-        'fakechroot',
-        'fakeroot',
-        'gdb',
-        'gdbserver',
-        'iproute2',
-        'less',
-        'nano',
-        'procps',
-        'socat',
-        'strace',
-        'tmux',
-    ]
-    include_packages = ','.join(include_packages)
-    exclude_packages = ','.join((
-        'binutils',
-        'binutils-common',
-        f'binutils-{DEB2GNU.get(arch, arch)}-linux-gnu',
-        'iptables',
-        'libbinutils',
-        'login',
-        'rsyslog',
-        'tzdata',
-    ))
-    subprocess.check_call([
-        'fakechroot',
-        'fakeroot',
-        '-s', os.path.join(chroot, 'fakeroot-state'),
-        'debootstrap',
-        f'--cache-dir={cache}',
-        '--foreign',
-        f'--arch={arch}',
-        '--variant=minbase',
-        f'--include={include_packages}',
-        f'--exclude={exclude_packages}',
-        suite,
-        chroot,
-    ])
 
 
 def check_qemu_version(qemu_path):
@@ -261,7 +207,7 @@ os.symlink(root + target[1:], symlink)
 
 
 def touch_ld_so_cache(chroot, **kwargs):
-    # If there is no /etc/ld.so.cache in a deboostrap chroot, ld.so might try
+    # If there is no /etc/ld.so.cache in a debootstrap chroot, ld.so might try
     # to access the host one, with catastrophic consequences.
     subprocess.check_call(host_fakeroot_command([
         'touch',
@@ -591,9 +537,7 @@ if __name__ == '__main__':
     parser.add_argument(
         '--cache-dir',
         help='Cache directory',
-        default=os.getenv(
-            'INITRAMFS_WRAP_CACHE_DIR',
-            os.path.expanduser('~/.cache/initramfs-wrap')),
+        default=default_cache_dir(),
     )
     parser.add_argument('-s', help='Step to execute')
     parser.add_argument('-u', help='Suite', default='buster')

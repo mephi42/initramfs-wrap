@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from collections import defaultdict
 import os
+import re
 import signal
 import sys
 import tempfile
@@ -44,7 +45,8 @@ class TestInitramfsWrap(unittest.TestCase):
             commands = self.arches[arch]
             for i, command in enumerate(commands):
                 child = pexpect.spawn(
-                    command,
+                    'sh',
+                    args=['-c', command],
                     timeout=300,
                     logfile=sys.stdout.buffer,
                     cwd=tmpdir,
@@ -60,11 +62,23 @@ class TestInitramfsWrap(unittest.TestCase):
                     child.sendline('strace /bin/true')
                     child.expect_exact('+++ exited with 0 +++')
                     child.expect_exact(prompt)
-                    child.kill(signal.SIGTERM)
+                    if arch != 's390x':
+                        # All programs crash under gdb on s390x:
+                        # Program received signal SIGSEGV, Segmentation fault.
+                        # 0x000003fffdf906d2 in ?? () from /lib/ld64.so.1
+                        child.sendline('gdb -batch -ex r /bin/true')
+                        child.expect(re.compile(
+                            br'\[Inferior 1 \(process \d+\) exited normally\]'))
+                        child.expect_exact(prompt)
+                    child.kill(signal.SIGHUP)
                 child.expect(pexpect.EOF)
                 child.close()
-                self.assertTrue(os.WIFEXITED(child.status))
-                self.assertEqual(0, os.WEXITSTATUS(child.status))
+                if os.WIFEXITED(child.status):
+                    self.assertEqual(0, os.WEXITSTATUS(child.status))
+                elif os.WIFSIGNALED(child.status):
+                    self.assertEqual(signal.SIGHUP, os.WTERMSIG(child.status))
+                else:
+                    self.fail()
 
     def test_armhf(self):
         self._test_arch('armhf')

@@ -1,4 +1,5 @@
 debootstrap-*
 .idea/
+__pycache__/
 qemu-*/
 qemu-*.tar.xz

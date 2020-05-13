@@ -92,50 +92,44 @@ The intermediate results are cached in `~/.cache/initramfs-wrap`.
 * [armhf](https://wiki.debian.org/ArmHardFloatPort)
 
 ```
-wget http://ftp.debian.org/debian/dists/stable/main/installer-armhf/current/images/netboot/vmlinuz
 initramfs-wrap -a armhf -o armhf.cpio.gz
-qemu-system-arm -M virt -m 256 -kernel vmlinuz -initrd armhf.cpio.gz -nographic
+qemu-system-arm -M virt -m 256 -kernel $(fetch-vmlinux armhf) -initrd armhf.cpio.gz -nographic
 ```
 
 * [arm64](https://wiki.debian.org/Arm64Port)
 
 ```
-wget http://ftp.debian.org/debian/dists/stable/main/installer-arm64/current/images/netboot/debian-installer/arm64/linux
 initramfs-wrap -a arm64 -o arm64.cpio
 xz -9 --check=crc32 arm64.cpio
-qemu-system-aarch64 -M virt -cpu cortex-a57 -m 256 -kernel linux -initrd arm64.cpio.xz -nographic -append 'cma=4M'
+qemu-system-aarch64 -M virt -cpu cortex-a57 -m 256 -kernel $(fetch-vmlinux arm64) -initrd arm64.cpio.xz -nographic -append 'cma=4M'
 ```
 
 * [mips](https://wiki.debian.org/MIPSPort)
 
 ```
-wget http://ftp.debian.org/debian/dists/stable/main/installer-mips/current/images/malta/netboot/vmlinux-4.19.0-8-4kc-malta
 initramfs-wrap -a mips -o mips.cpio.gz
-qemu-system-mips -M malta -m 256 -kernel vmlinux-4.19.0-8-4kc-malta -initrd mips.cpio.gz -nographic
+qemu-system-mips -M malta -m 256 -kernel $(fetch-vmlinux mips) -initrd mips.cpio.gz -nographic
 ```
 
 * [s390x](https://www.debian.org/ports/s390/)
 
 ```
-wget http://ftp.debian.org/debian/dists/stable/main/installer-s390x/current/images/generic/kernel.debian
 initramfs-wrap -a s390x -o s390x.cpio.gz
-qemu-system-s390x -m 256 -kernel kernel.debian -initrd s390x.cpio.gz -nographic
+qemu-system-s390x -m 256 -kernel $(fetch-vmlinux s390x) -initrd s390x.cpio.gz -nographic
 ```
 
 * [ppc64el](https://wiki.debian.org/ppc64el)
 
 ```
-wget http://ftp.debian.org/debian/dists/stable/main/installer-ppc64el/current/images/netboot/debian-installer/ppc64el/vmlinux
 initramfs-wrap -a ppc64el -o ppc64el.cpio.gz
-qemu-system-ppc64le -m 768 -kernel vmlinux -initrd ppc64el.cpio.gz -nographic -vga none
+qemu-system-ppc64le -m 768 -kernel $(fetch-vmlinux ppc64el) -initrd ppc64el.cpio.gz -nographic -vga none
 ```
 
 * [amd64](https://www.debian.org/ports/amd64/)
 
 ```
-wget http://ftp.debian.org/debian/dists/stable/main/installer-amd64/current/images/netboot/debian-installer/amd64/linux
 initramfs-wrap -a amd64 -o amd64.cpio.gz
-qemu-system-x86_64 -m 256 -kernel linux -initrd amd64.cpio.gz -nographic -append 'console=ttyS0'
+qemu-system-x86_64 -m 256 -kernel $(fetch-vmlinux amd64) -initrd amd64.cpio.gz -nographic -append 'console=ttyS0'
 ```
 
 # Random advice
