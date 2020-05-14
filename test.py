@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 from collections import defaultdict
 import os
-import re
 import signal
 import sys
 import tempfile
+import time
 import unittest
 
 import pexpect
@@ -57,6 +57,10 @@ class TestInitramfsWrap(unittest.TestCase):
                     },
                 )
                 if i == len(commands) - 1:
+                    # hack to prevent "random: fast init done" from messing up
+                    # the prompt
+                    time.sleep(1)
+                    child.sendline()
                     prompt = 'root@(none):/#'
                     child.expect_exact(prompt)
                     child.sendline('strace /bin/true')
@@ -67,8 +71,8 @@ class TestInitramfsWrap(unittest.TestCase):
                         # Program received signal SIGSEGV, Segmentation fault.
                         # 0x000003fffdf906d2 in ?? () from /lib/ld64.so.1
                         child.sendline('gdb -batch -ex r /bin/true')
-                        child.expect(re.compile(
-                            br'\[Inferior 1 \(process \d+\) exited normally\]'))
+                        child.expect(
+                            br'\[Inferior 1 \(process \d+\) exited normally\]')
                         child.expect_exact(prompt)
                     child.kill(signal.SIGHUP)
                 child.expect(pexpect.EOF)

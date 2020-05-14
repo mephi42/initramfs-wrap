@@ -88,12 +88,45 @@ def debootstrap_stage1(chroot, arch, suite, cache_dir, extra_packages):
     ])
 
 
+def host_fakeroot_command(chroot, args):
+    result = [
+        'fakeroot',
+        '-i', os.path.join(chroot, 'fakeroot-state'),
+        '-s', os.path.join(chroot, 'fakeroot-state'),
+    ]
+    result.extend(args)
+    return result
+
+
+def add_to_minichroot(chroot: str, path: str, paths: Set[str]) -> None:
+    assert os.path.isabs(path)
+    parts = []
+    while path != '/':
+        path, part = os.path.split(path)
+        parts.append(part)
+    while len(parts) > 0:
+        path = os.path.join(path, parts.pop())
+        paths.add(path)
+        try:
+            next_path = os.readlink(f'{chroot}{path}')
+        except OSError:
+            pass
+        else:
+            if os.path.isabs(next_path):
+                assert False, 'Absolute symlinks are not supported yet'
+            else:
+                while next_path != '':
+                    next_path, part = os.path.split(next_path)
+                    parts.append(part)
+                path = os.path.dirname(path)
+
+
 def iter_dt_needed(chroot, arch, path):
     from elftools.elf.elffile import ELFFile, InterpSegment
     from elftools.elf.dynamic import DynamicSegment
-    libdir = os.path.join(
-        chroot, 'lib', f'{DEB2GNU.get(arch, arch)}-linux-gnu')
-    with open(os.path.join(chroot, path), 'rb') as fp:
+    libdir = os.path.join('/lib', f'{DEB2GNU.get(arch, arch)}-linux-gnu')
+    assert os.path.isabs(path)
+    with open(f'{chroot}{path}', 'rb') as fp:
         elf = ELFFile(fp)
         for segment in elf.iter_segments():
             if isinstance(segment, InterpSegment):
@@ -101,22 +134,48 @@ def iter_dt_needed(chroot, arch, path):
             if isinstance(segment, DynamicSegment):
                 for tag in segment.iter_tags('DT_NEEDED'):
                     needed_path = os.path.join(libdir, tag.needed)
-                    if not os.path.exists(needed_path):
+                    if not os.path.exists(f'{chroot}{needed_path}'):
                         raise Exception(f'{needed_path} does not exist')
                     yield needed_path
 
 
-def add_minichroot_files(chroot: str, arch: str, path: str, paths: Set[str]):
-    while True:
-        if path in paths:
-            return
-        paths.add(path)
-        try:
-            next_path = os.readlink(os.path.join(chroot, path))
-        except OSError:
-            break
-        if not os.path.isabs(next_path):
-            next_path = os.path.join(os.path.dirname(path), next_path)
-        path = next_path
+def add_elf_to_minichroot(
+        chroot: str, arch: str, path: str, paths: Set[str]) -> None:
+    add_to_minichroot(chroot, path, paths)
     for needed_path in iter_dt_needed(chroot, arch, path):
-        add_minichroot_files(chroot, arch, needed_path, paths)
+        add_elf_to_minichroot(chroot, arch, needed_path, paths)
+
+
+def get_chroot_path(cache_dir, arch, suite):
+    return os.path.join(cache_dir, f'{arch}-{suite}.tar.gz')
+
+
+def get_minichroot_path(cache_dir, arch, suite):
+    return os.path.join(cache_dir, f'{arch}-{suite}-mini.cpio')
+
+
+def create_minichroot(chroot, arch, suite, cache_dir):
+    paths = {'/'}
+    for path in (
+            '/bin/base64',
+            '/bin/gzip',
+            '/bin/sh',
+            '/bin/tar',
+    ):
+        add_elf_to_minichroot(chroot, arch, path, paths)
+    with open(get_minichroot_path(cache_dir, arch, suite), 'wb') as fp:
+        p = subprocess.Popen(
+            host_fakeroot_command(
+                chroot, ['cpio', '-o', '-H', 'newc', '-R', '+0:+0']),
+            stdin=subprocess.PIPE,
+            stdout=fp,
+            cwd=chroot,
+        )
+        try:
+            for path in sorted(paths):
+                p.stdin.write(f'.{path}\n'.encode())
+        finally:
+            p.stdin.close()
+            returncode = p.wait()
+            if returncode != 0:
+                raise subprocess.CalledProcessError(returncode, p.args)

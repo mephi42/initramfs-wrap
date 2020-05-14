@@ -11,7 +11,8 @@ import subprocess
 import tempfile
 
 from initramfs_wrap import DEB2GNU, DEB2QEMU, DEB2CONSOLE, \
-    debootstrap_stage1, default_cache_dir
+    debootstrap_stage1, default_cache_dir, get_chroot_path, \
+    host_fakeroot_command
 
 
 def debootstrap1(chroot, arch, suite, cache_dir, **kwargs):
@@ -70,20 +71,6 @@ def run_in_chroot(chroot, cmd):
         'PATH': f'{chroot}/sbin:{chroot}/bin:{env_path}',
         'DEBIAN_FRONTEND': 'noninteractive',
     })
-
-
-def get_chroot_archive(cache_dir, arch, suite):
-    return os.path.join(cache_dir, f'{arch}-{suite}.tar.gz')
-
-
-def host_fakeroot_command(args):
-    result = [
-        'fakeroot',
-        '-i', os.path.join(chroot, 'fakeroot-state'),
-        '-s', os.path.join(chroot, 'fakeroot-state'),
-    ]
-    result.extend(args)
-    return result
 
 
 def check_qemu_version(qemu_path):
@@ -146,7 +133,7 @@ def prune_dpkg_exclude(chroot, arch, **kwargs):
         if not os.path.isdir(chroot_exclude_path):
             continue
         subprocess.check_call(host_fakeroot_command(
-            ['find', chroot_exclude_path, '-type', 'f', '-delete']))
+            chroot, ['find', chroot_exclude_path, '-type', 'f', '-delete']))
 
 
 def ldconfig_paths(chroot):
@@ -162,10 +149,10 @@ def fake_ldconfig(chroot, **kwargs):
     with open(dpkg_config_path, 'w') as fp:
         fp.write(f'path-exclude={ldconfig}\n')
     subprocess.check_call(host_fakeroot_command(
-        ['mv', f'{chroot}/{ldconfig}', f'{chroot}/{ldconfig_real}']))
+        chroot, ['mv', f'{chroot}/{ldconfig}', f'{chroot}/{ldconfig_real}']))
     target = os.path.relpath('/bin/true', os.path.dirname(ldconfig))
     subprocess.check_call(host_fakeroot_command(
-        ['ln', '-s', target, f'{chroot}/{ldconfig}']))
+        chroot, ['ln', '-s', target, f'{chroot}/{ldconfig}']))
 
 
 def allow_host_paths_in_chroot(chroot, **kwargs):
@@ -181,7 +168,8 @@ def allow_host_paths_in_chroot(chroot, **kwargs):
     # target makes such symlinks work both inside and outside of a chroot.
     dst = f'{chroot}/{chroot}'
     src = os.path.relpath(chroot, os.path.dirname(dst))
-    subprocess.check_call(host_fakeroot_command(['ln', '-s', src, dst]))
+    subprocess.check_call(host_fakeroot_command(
+        chroot, ['ln', '-s', src, dst]))
 
 
 def relativize_symlinks(chroot, **kwargs):
@@ -198,7 +186,7 @@ root = '../' * (sum(1 for c in symlink if c == '/') - 1)
 os.unlink(symlink)
 os.symlink(root + target[1:], symlink)
 '''
-    subprocess.check_call(host_fakeroot_command([
+    subprocess.check_call(host_fakeroot_command(chroot, [
         'find',
         '.',
         '-lname', '/*',
@@ -209,7 +197,7 @@ os.symlink(root + target[1:], symlink)
 def touch_ld_so_cache(chroot, **kwargs):
     # If there is no /etc/ld.so.cache in a debootstrap chroot, ld.so might try
     # to access the host one, with catastrophic consequences.
-    subprocess.check_call(host_fakeroot_command([
+    subprocess.check_call(host_fakeroot_command(chroot, [
         'touch',
         f'{chroot}/etc/ld.so.cache',
     ]))
@@ -228,10 +216,10 @@ def relativize_symlinks_again(chroot, **kwargs):
 
 
 def archive_chroot(chroot, arch, suite, cache_dir, **kwargs):
-    subprocess.check_call(host_fakeroot_command([
+    subprocess.check_call(host_fakeroot_command(chroot, [
         'tar',
         '-C', chroot,
-        '-czf', get_chroot_archive(cache_dir, arch, suite),
+        '-czf', get_chroot_path(cache_dir, arch, suite),
         '.',
     ]))
 
@@ -260,14 +248,14 @@ def extract_chroot(chroot, arch, suite, cache_dir, **kwargs):
         '-s', os.path.join(chroot, 'fakeroot-state'),
         'tar',
         '-C', chroot,
-        '-xzf', get_chroot_archive(cache_dir, arch, suite),
+        '-xzf', get_chroot_path(cache_dir, arch, suite),
     ])
 
 
 def extract_input_initramfs_fp(chroot, fp):
     orig = os.path.join(chroot, 'orig')
     os.makedirs(orig, exist_ok=True)
-    args = host_fakeroot_command(['cpio', '-idv'])
+    args = host_fakeroot_command(chroot, ['cpio', '-idv'])
     p = subprocess.Popen(args, stdin=subprocess.PIPE, cwd=orig)
     shutil.copyfileobj(fp, p.stdin)
     p.stdin.flush()
@@ -303,14 +291,14 @@ exec setsid sh -c 'exec /bin/bash <>{console} 2>&1'
 ''')
         fp.flush()
         fp.seek(0)
-        subprocess.check_call(host_fakeroot_command([
+        subprocess.check_call(host_fakeroot_command(chroot, [
             'sh', '-c', 'cat >init && chmod 755 init',
         ]), stdin=fp, cwd=chroot)
 
 
 def configure_root(chroot, **kwargs):
     shadow = os.path.join(chroot, 'etc', 'shadow')
-    subprocess.check_call(host_fakeroot_command([
+    subprocess.check_call(host_fakeroot_command(chroot, [
         'sed', '-i', r's/root:\*:/root::/', shadow,
     ]))
 
@@ -349,7 +337,7 @@ def archive_output_img(path, exclude_expr):
     img_fs = 'ext2'
     with open(path, 'wb') as fp:
         fp.truncate(img_size)
-    tar_args = host_fakeroot_command([
+    tar_args = host_fakeroot_command(chroot, [
         'sh', '-c', f'find . {exclude_expr} | tar -T - -c',
     ])
     tar = subprocess.Popen(tar_args, stdout=subprocess.PIPE, cwd=chroot)
@@ -484,7 +472,7 @@ def archive_output_initramfs(
     exclude_expr = make_exclude_expr(arch, exclude)
     if output_initramfs.endswith('.raw'):
         return archive_output_img(output_initramfs, exclude_expr)
-    args = host_fakeroot_command([
+    args = host_fakeroot_command(chroot, [
         'sh', '-c', f'find . {exclude_expr} | cpio -o -H newc',
     ])
     p = subprocess.Popen(
@@ -557,7 +545,7 @@ if __name__ == '__main__':
     try:
         if (args.f or
                 is_in_sequence(args.s, CHROOT_SEQUENCE) or
-                not os.path.exists(get_chroot_archive(
+                not os.path.exists(get_chroot_path(
                     args.cache_dir, args.a, args.u))):
             for chroot_step in CHROOT_SEQUENCE:
                 if args.s is None or args.s == chroot_step.__name__:
