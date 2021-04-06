@@ -264,6 +264,22 @@ def extract_input_initramfs_fp(chroot, fp):
         raise subprocess.CalledProcessError(retcode, args)
 
 
+def extract_input_img(chroot, path):
+    orig = os.path.join(chroot, 'orig')
+    os.makedirs(orig, exist_ok=True)
+    tar_args = host_fakeroot_command(chroot, ['tar', '-x'])
+    tar = subprocess.Popen(tar_args, stdin=subprocess.PIPE, cwd=orig)
+    subprocess.check_call([
+        'guestfish', '-a', path,
+        'launch', ':',
+        'mount', '/dev/sda', '/', ':',
+        'tar-out', '/', '-',
+    ], stdout=tar.stdin)
+    retcode = tar.wait()
+    if retcode != 0:
+        raise subprocess.CalledProcessError(retcode, tar_args)
+
+
 def extract_input_initramfs(chroot, input_initramfs, **kwargs):
     if input_initramfs is None:
         return
@@ -273,10 +289,17 @@ def extract_input_initramfs(chroot, input_initramfs, **kwargs):
         if magic[:2] == b'\037\213':
             with gzip.open(fp) as gzfp:
                 extract_input_initramfs_fp(chroot, gzfp)
-        elif magic == b'070701':
+            return
+        if magic == b'070701':
             extract_input_initramfs_fp(chroot, fp)
-        else:
-            raise Exception(f'{input_initramfs} is neither .gz nor .cpio file')
+            return
+        fp.seek(0x438)
+        ext2_magic = fp.read(2)
+        fp.seek(0)
+        if ext2_magic == b'\x53\xef':
+            extract_input_img(chroot, input_initramfs)
+            return
+    raise Exception(f'{input_initramfs} has an unsupported format')
 
 
 def configure_init(chroot, arch, **kwargs):
@@ -333,7 +356,7 @@ def make_exclude_expr(arch, exclude):
 
 
 def archive_output_img(path, exclude_expr):
-    img_size = 1024 * 1024 * 1024
+    img_size = 2 * 1024 * 1024 * 1024
     img_fs = 'ext2'
     with open(path, 'wb') as fp:
         fp.truncate(img_size)

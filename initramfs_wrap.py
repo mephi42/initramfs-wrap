@@ -28,7 +28,7 @@ DEB2KERNEL = {
     'amd64': 'http://ftp.debian.org/debian/dists/stable/main/installer-amd64/current/images/netboot/debian-installer/amd64/linux',  # noqa: E501
     'armhf': 'http://ftp.debian.org/debian/dists/stable/main/installer-armhf/current/images/netboot/vmlinuz',  # noqa: E501
     'arm64': 'http://ftp.debian.org/debian/dists/stable/main/installer-arm64/current/images/netboot/debian-installer/arm64/linux',  # noqa: E501
-    'mips': 'http://ftp.debian.org/debian/dists/stable/main/installer-mips/current/images/malta/netboot/vmlinux-4.19.0-9-4kc-malta',  # noqa: E501
+    'mips': 'http://ftp.debian.org/debian/dists/stable/main/installer-mips/current/images/malta/netboot/vmlinux-4.19.0-16-4kc-malta',  # noqa: E501
     'ppc64el': 'http://ftp.debian.org/debian/dists/stable/main/installer-ppc64el/current/images/netboot/debian-installer/ppc64el/vmlinux',  # noqa: E501
     's390x': 'http://ftp.debian.org/debian/dists/stable/main/installer-s390x/current/images/generic/kernel.debian',  # noqa: E501
 }
