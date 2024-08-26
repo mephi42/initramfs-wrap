@@ -86,7 +86,7 @@ def check_qemu_version(qemu_path):
 
 def copy_qemu_user_static(chroot, arch, **kwargs):
     qemu_path = get_binfmt_misc_interpreter(arch)
-    if qemu_path is not None:
+    if qemu_path is not None and not qemu_path.endswith('-binfmt-P'):
         check_qemu_version(qemu_path)
         shutil.copy(qemu_path, chroot + qemu_path)
 
