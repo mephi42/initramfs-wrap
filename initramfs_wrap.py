@@ -1,9 +1,9 @@
+from errno import EINVAL
+from glob import glob
 import os
 import subprocess
-from typing import Set
+from typing import List, Set, Optional
 from urllib.request import urlretrieve
-
-from typing import List, Optional
 
 DEB2GNU = {
     "amd64": "x86_64",
@@ -115,34 +115,52 @@ def host_fakeroot_command(chroot, args):
     return result
 
 
-def add_to_minichroot(chroot: str, path: str, paths: Set[str]) -> None:
-    assert os.path.isabs(path)
-    parts = []
-    while path != "/":
+def split_parts(path: str, parts: List[str]):
+    while path not in ("", "/"):
         path, part = os.path.split(path)
         parts.append(part)
+    return path
+
+
+def add_to_initramfs(chroot: str, path: str, results: Set[str]):
+    assert os.path.isabs(path)
+    parts = []
+    path = split_parts(path, parts)
     while len(parts) > 0:
-        path = os.path.join(path, parts.pop())
-        paths.add(path)
+        print((path, parts))
+        part = parts.pop()
+        if part == ".":
+            continue
+        if part == "..":
+            path = os.path.dirname(path)
+            continue
+        path = os.path.join(path, part)
+        results.add(path)
         try:
             next_path = os.readlink(f"{chroot}{path}")
-        except OSError:
-            pass
+        except OSError as ex:
+            if ex.errno == EINVAL:
+                continue
+            raise
+        if os.path.isabs(next_path):
+            path = split_parts(next_path, parts)
         else:
-            if os.path.isabs(next_path):
-                assert False, "Absolute symlinks are not supported yet"
-            else:
-                while next_path != "":
-                    next_path, part = os.path.split(next_path)
-                    parts.append(part)
-                path = os.path.dirname(path)
+            split_parts(next_path, parts)
+            path = os.path.dirname(path)
 
 
-def iter_dt_needed(chroot, arch, path):
+def find_in_lib_paths(chroot: str, lib_paths: List[str], path: str):
+    for libpath in lib_paths:
+        lib = os.path.join(f"{chroot}{libpath}", path)
+        if os.path.exists(lib):
+            return os.path.join(libpath, path)
+    raise RuntimeError(f"Could not find {path} in {os.pathsep.join(lib_paths)}")
+
+
+def iter_dt_needed(chroot: str, path: str, lib_paths: List[str]):
     from elftools.elf.elffile import ELFFile, InterpSegment
     from elftools.elf.dynamic import DynamicSegment
 
-    libdir = os.path.join("/lib", f"{DEB2GNU.get(arch, arch)}-linux-gnu")
     assert os.path.isabs(path)
     with open(f"{chroot}{path}", "rb") as fp:
         elf = ELFFile(fp)
@@ -151,36 +169,60 @@ def iter_dt_needed(chroot, arch, path):
                 yield segment.get_interp_name()
             if isinstance(segment, DynamicSegment):
                 for tag in segment.iter_tags("DT_NEEDED"):
-                    needed_path = os.path.join(libdir, tag.needed)
-                    if not os.path.exists(f"{chroot}{needed_path}"):
-                        raise Exception(f"{needed_path} does not exist")
-                    yield needed_path
+                    yield find_in_lib_paths(chroot, lib_paths, tag.needed)
 
 
-def add_elf_to_minichroot(chroot: str, arch: str, path: str, paths: Set[str]) -> None:
-    add_to_minichroot(chroot, path, paths)
-    for needed_path in iter_dt_needed(chroot, arch, path):
-        add_elf_to_minichroot(chroot, arch, needed_path, paths)
+def __add_elf_to_initramfs(
+    chroot: str, path: str, lib_paths: List[str], results: Set[str]
+):
+    add_to_initramfs(chroot, path, results)
+    for needed_path in iter_dt_needed(chroot, path, lib_paths):
+        __add_elf_to_initramfs(chroot, needed_path, lib_paths, results)
+
+
+def parse_ld_so_conf(chroot: str, results: List[str], ld_so_conf: Optional[str] = None):
+    # See elf/ldconfig.c: parse_conf_include() and posix/glob.c.
+    if ld_so_conf is None:
+        ld_so_conf = f"{chroot}/etc/ld.so.conf"
+    with open(ld_so_conf) as fp:
+        for line in fp:
+            idx = line.find("#")
+            if idx != -1:
+                line = line[:idx]
+            line = line.strip()
+            if line == "":
+                continue
+            if len(line) >= 8 and line.startswith("include") and line[7].isspace():
+                for path in sorted(glob(f"{chroot}{line[8:]}")):
+                    parse_ld_so_conf(chroot, results, path)
+            else:
+                results.append(line)
+
+
+def add_elf_to_initramfs(chroot: str, path: str, results: Set[str]):
+    lib_paths = []
+    parse_ld_so_conf(chroot, lib_paths)
+    print(lib_paths)
+    __add_elf_to_initramfs(chroot, path, lib_paths, results)
 
 
 def get_chroot_path(cache_dir, arch, suite):
     return os.path.join(cache_dir, f"{arch}-{suite}.tar.gz")
 
 
-def get_minichroot_path(cache_dir, arch, suite):
+def get_initramfs_path(cache_dir, arch, suite):
     return os.path.join(cache_dir, f"{arch}-{suite}-mini.cpio")
 
 
-def create_minichroot(chroot, arch, suite, cache_dir):
+def create_initramfs(initramfs, chroot):
     paths = {"/"}
     for path in (
         "/bin/base64",
-        "/bin/gzip",
         "/bin/sh",
         "/bin/tar",
     ):
-        add_elf_to_minichroot(chroot, arch, path, paths)
-    with open(get_minichroot_path(cache_dir, arch, suite), "wb") as fp:
+        add_elf_to_initramfs(chroot, path, paths)
+    with open(initramfs, "wb") as fp:
         p = subprocess.Popen(
             host_fakeroot_command(chroot, ["cpio", "-o", "-H", "newc", "-R", "+0:+0"]),
             stdin=subprocess.PIPE,

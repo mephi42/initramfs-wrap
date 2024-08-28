@@ -8,7 +8,7 @@ def main():
     parser = argparse.ArgumentParser(description="Download and extract packages")
     parser.add_argument(
         "--chroot",
-        help="Target directory",
+        help="Destination directory",
         required=True,
     )
     parser.add_argument(
