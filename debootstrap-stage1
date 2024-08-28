@@ -1,0 +1,37 @@
+#!/usr/bin/env python3
+import argparse
+
+from initramfs_wrap import add_cache_dir_parser, debootstrap_stage1
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Download and extract packages")
+    parser.add_argument(
+        "--chroot",
+        help="Target directory",
+        required=True,
+    )
+    parser.add_argument(
+        "--arch",
+        help="Target architecture",
+        required=True,
+    )
+    parser.add_argument(
+        "--suite",
+        help="Target distro",
+        default="buster",
+    )
+    add_cache_dir_parser(parser)
+    parser.add_argument(
+        "--extra-package",
+        help="Additional packages to install",
+        action="append",
+    )
+    args = parser.parse_args()
+    debootstrap_stage1(
+        args.chroot, args.arch, args.suite, args.cache_dir, args.extra_package
+    )
+
+
+if __name__ == "__main__":
+    main()

@@ -3,6 +3,8 @@ import subprocess
 from typing import Set
 from urllib.request import urlretrieve
 
+from typing import List, Optional
+
 DEB2GNU = {
     "amd64": "x86_64",
     "armhf": "arm",
@@ -48,9 +50,17 @@ def fetch_vmlinux(arch, cache_dir):
     return path
 
 
-def debootstrap_stage1(chroot, arch, suite, cache_dir, extra_packages):
+def debootstrap_stage1(
+    chroot: str,
+    arch: str,
+    suite: str,
+    cache_dir: str,
+    extra_packages: Optional[List[str]],
+):
     cache = os.path.join(cache_dir, "debootstrap")
     os.makedirs(cache, exist_ok=True)
+    if extra_packages is None:
+        extra_packages = []
     include_packages = extra_packages + [
         "gdb",
         "gdbserver",
@@ -185,3 +195,11 @@ def create_minichroot(chroot, arch, suite, cache_dir):
             returncode = p.wait()
             if returncode != 0:
                 raise subprocess.CalledProcessError(returncode, p.args)
+
+
+def add_cache_dir_parser(parser):
+    parser.add_argument(
+        "--cache-dir",
+        help="Cache directory",
+        default=default_cache_dir(),
+    )

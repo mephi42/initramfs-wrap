@@ -1,4 +1,3 @@
-debootstrap-*
 .idea/
 __pycache__/
 qemu-*/

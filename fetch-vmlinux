@@ -1,16 +1,12 @@
 #!/usr/bin/env python3
 import argparse
 
-from initramfs_wrap import default_cache_dir, fetch_vmlinux
+from initramfs_wrap import add_cache_dir_parser, fetch_vmlinux
 
 
 def main():
     parser = argparse.ArgumentParser(description="Download linux kernel")
-    parser.add_argument(
-        "--cache-dir",
-        help="Cache directory",
-        default=default_cache_dir(),
-    )
+    add_cache_dir_parser(parser)
     parser.add_argument("arch", help="Architecture")
     args = parser.parse_args()
     print(fetch_vmlinux(args.arch, args.cache_dir))

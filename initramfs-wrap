@@ -11,11 +11,11 @@ import subprocess
 import tempfile
 
 from initramfs_wrap import (
+    add_cache_dir_parser,
     DEB2GNU,
     DEB2QEMU,
     DEB2CONSOLE,
     debootstrap_stage1,
-    default_cache_dir,
     get_chroot_path,
     host_fakeroot_command,
 )
@@ -653,11 +653,7 @@ if __name__ == "__main__":
     parser.add_argument("-i", help="Input initramfs")
     parser.add_argument("-k", action="store_true", help="Keep intermediate chroot")
     parser.add_argument("-o", required=True, help="Output initramfs")
-    parser.add_argument(
-        "--cache-dir",
-        help="Cache directory",
-        default=default_cache_dir(),
-    )
+    add_cache_dir_parser(parser)
     parser.add_argument("-s", help="Step to execute")
     parser.add_argument("-u", help="Suite", default="buster")
     parser.add_argument("-v", action="store_true", help="Verbose output")
