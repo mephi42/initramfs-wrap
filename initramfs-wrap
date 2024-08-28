@@ -10,15 +10,21 @@ import shutil
 import subprocess
 import tempfile
 
-from initramfs_wrap import DEB2GNU, DEB2QEMU, DEB2CONSOLE, \
-    debootstrap_stage1, default_cache_dir, get_chroot_path, \
-    host_fakeroot_command
+from initramfs_wrap import (
+    DEB2GNU,
+    DEB2QEMU,
+    DEB2CONSOLE,
+    debootstrap_stage1,
+    default_cache_dir,
+    get_chroot_path,
+    host_fakeroot_command,
+)
 
 
 def debootstrap1(chroot, arch, suite, cache_dir, **kwargs):
     extra_packages = [
-        'fakechroot',
-        'fakeroot',
+        "fakechroot",
+        "fakeroot",
     ]
     debootstrap_stage1(chroot, arch, suite, cache_dir, extra_packages)
 
@@ -27,132 +33,145 @@ def get_binfmt_misc_interpreter(arch):
     if platform.machine() == DEB2GNU.get(arch, arch):
         return None
     qemu_arch = DEB2QEMU.get(arch, arch)
-    with open(f'/proc/sys/fs/binfmt_misc/qemu-{qemu_arch}') as fp:
+    with open(f"/proc/sys/fs/binfmt_misc/qemu-{qemu_arch}") as fp:
         for line in fp:
-            if line.startswith('interpreter '):
+            if line.startswith("interpreter "):
                 return line[12:-1]
-    raise Exception('/proc/sys/fs/binfmt_misc is not configured')
+    raise Exception("/proc/sys/fs/binfmt_misc is not configured")
 
 
 def extract_deb(chroot, deb):
-    archives = os.path.join(
-        chroot, 'var', 'cache', 'apt', 'archives')
-    deb_path, = glob(os.path.join(archives, f'{deb}_*.deb'))
-    subprocess.check_call(['dpkg', '-x', deb_path, chroot])
+    archives = os.path.join(chroot, "var", "cache", "apt", "archives")
+    (deb_path,) = glob(os.path.join(archives, f"{deb}_*.deb"))
+    subprocess.check_call(["dpkg", "-x", deb_path, chroot])
 
 
 def run_in_chroot(chroot, cmd):
-    env_path = os.environ['PATH']
-    fakechroot = f'{chroot}/bin/fakechroot'
-    libfakechroot, = glob(f'{chroot}/usr/lib/*/fakechroot/libfakechroot.so')
+    env_path = os.environ["PATH"]
+    fakechroot = f"{chroot}/bin/fakechroot"
+    (libfakechroot,) = glob(f"{chroot}/usr/lib/*/fakechroot/libfakechroot.so")
     args = [
         # Guest shell (thanks to $PATH).
-        'sh',
+        "sh",
         # Preload guest libfakechroot.
         fakechroot,
-        '-l', libfakechroot,
+        "-l",
+        libfakechroot,
         # Guest chroot (thanks to $PATH).
-        'chroot',
+        "chroot",
         chroot,
         # Don't look for binaries in host directories.
-        'env',
-        'PATH=/usr/sbin:/usr/bin:/sbin:/bin',
+        "env",
+        "PATH=/usr/sbin:/usr/bin:/sbin:/bin",
         # Preload guest libfakeroot.
-        'fakeroot-sysv',
-        '-i', '/fakeroot-state',
-        '-s', '/fakeroot-state',
+        "fakeroot-sysv",
+        "-i",
+        "/fakeroot-state",
+        "-s",
+        "/fakeroot-state",
     ]
     args.extend(cmd)
-    subprocess.check_call(args, env={
-        **os.environ,
-        # This is only to find .interp.
-        # qemu-user is not affected by fakechroot and fakeroot.
-        'QEMU_LD_PREFIX': chroot,
-        'PATH': f'{chroot}/sbin:{chroot}/bin:{env_path}',
-        'DEBIAN_FRONTEND': 'noninteractive',
-    })
+    subprocess.check_call(
+        args,
+        env={
+            **os.environ,
+            # This is only to find .interp.
+            # qemu-user is not affected by fakechroot and fakeroot.
+            "QEMU_LD_PREFIX": chroot,
+            "PATH": f"{chroot}/sbin:{chroot}/bin:{env_path}",
+            "DEBIAN_FRONTEND": "noninteractive",
+        },
+    )
 
 
 def check_qemu_version(qemu_path):
-    version = subprocess.check_output([qemu_path, '--version']).decode()
-    m = re.match(r'^qemu-.* version (\d+).(\d+).(\d+)', version)
+    version = subprocess.check_output([qemu_path, "--version"]).decode()
+    m = re.match(r"^qemu-.* version (\d+).(\d+).(\d+)", version)
     if m is None:
-        raise Exception(f'Could not determine qemu version: {version}')
+        raise Exception(f"Could not determine qemu version: {version}")
     major, minor, patch = map(int, m.groups())
     if (major, minor, patch) < (4, 1, 0):
-        raise Exception(
-            f'{qemu_path} is too old, please upgrade to at least v4.1.0')
+        raise Exception(f"{qemu_path} is too old, please upgrade to at least v4.1.0")
 
 
 def copy_qemu_user_static(chroot, arch, **kwargs):
     qemu_path = get_binfmt_misc_interpreter(arch)
-    if qemu_path is not None and not qemu_path.endswith('-binfmt-P'):
+    if qemu_path is not None and not qemu_path.endswith("-binfmt-P"):
         check_qemu_version(qemu_path)
         shutil.copy(qemu_path, chroot + qemu_path)
 
 
 def extract_bootstrapping_tools(chroot, **kwargs):
-    for package in ('libfakeroot', 'fakeroot', 'libfakechroot', 'fakechroot'):
+    for package in ("libfakeroot", "fakeroot", "libfakechroot", "fakechroot"):
         extract_deb(chroot, package)
 
 
 def fixup_fakechroot(chroot, **kwargs):
-    path = os.path.join(chroot, 'bin', 'fakechroot')
-    with open(path, 'r+') as fp:
+    path = os.path.join(chroot, "bin", "fakechroot")
+    with open(path, "r+") as fp:
         content = fp.read()
         fp.truncate(0)
-        fp.write(content.replace(
-            'FAKECHROOT_DETECT=1 /bin/echo',
-            'FAKECHROOT_DETECT=1 sh -c :'))
+        fp.write(
+            content.replace(
+                "FAKECHROOT_DETECT=1 /bin/echo", "FAKECHROOT_DETECT=1 sh -c :"
+            )
+        )
 
 
 def get_exclude_paths(arch):
     return (
-        '/usr/share/calendar',
-        '/usr/share/doc',
-        '/usr/share/info',
-        '/usr/share/locale',
-        '/usr/share/man',
-        f'/usr/lib/{DEB2GNU.get(arch, arch)}-linux-gnu/gconv',
-        f'/usr/lib/{DEB2GNU.get(arch, arch)}-linux-gnu/perl-base/unicore',
-        '/usr/include/valgrind',
+        "/usr/share/calendar",
+        "/usr/share/doc",
+        "/usr/share/info",
+        "/usr/share/locale",
+        "/usr/share/man",
+        f"/usr/lib/{DEB2GNU.get(arch, arch)}-linux-gnu/gconv",
+        f"/usr/lib/{DEB2GNU.get(arch, arch)}-linux-gnu/perl-base/unicore",
+        "/usr/include/valgrind",
     )
 
 
 def configure_dpkg_exclude(chroot, arch, **kwargs):
-    config_path = os.path.join(chroot, 'etc', 'dpkg', 'dpkg.cfg.d', 'exclude')
-    with open(config_path, 'w') as fp:
+    config_path = os.path.join(chroot, "etc", "dpkg", "dpkg.cfg.d", "exclude")
+    with open(config_path, "w") as fp:
         for exclude_path in get_exclude_paths(arch):
-            fp.write(f'path-exclude={exclude_path}/*\n')
-        fp.write(f'path-exclude=*.a\n')
+            fp.write(f"path-exclude={exclude_path}/*\n")
+        fp.write(f"path-exclude=*.a\n")
 
 
 def prune_dpkg_exclude(chroot, arch, **kwargs):
     for exclude_path in get_exclude_paths(arch):
-        chroot_exclude_path = f'{chroot}/{exclude_path}'
+        chroot_exclude_path = f"{chroot}/{exclude_path}"
         if not os.path.isdir(chroot_exclude_path):
             continue
-        subprocess.check_call(host_fakeroot_command(
-            chroot, ['find', chroot_exclude_path, '-type', 'f', '-delete']))
+        subprocess.check_call(
+            host_fakeroot_command(
+                chroot, ["find", chroot_exclude_path, "-type", "f", "-delete"]
+            )
+        )
 
 
 def ldconfig_paths(chroot):
     return (
-        '/sbin/ldconfig',
-        '/sbin/ldconfig.REAL',
-        os.path.join(chroot, 'etc', 'dpkg', 'dpkg.cfg.d', 'exclude-ldconfig'),
+        "/sbin/ldconfig",
+        "/sbin/ldconfig.REAL",
+        os.path.join(chroot, "etc", "dpkg", "dpkg.cfg.d", "exclude-ldconfig"),
     )
 
 
 def fake_ldconfig(chroot, **kwargs):
     ldconfig, ldconfig_real, dpkg_config_path = ldconfig_paths(chroot)
-    with open(dpkg_config_path, 'w') as fp:
-        fp.write(f'path-exclude={ldconfig}\n')
-    subprocess.check_call(host_fakeroot_command(
-        chroot, ['mv', f'{chroot}/{ldconfig}', f'{chroot}/{ldconfig_real}']))
-    target = os.path.relpath('/bin/true', os.path.dirname(ldconfig))
-    subprocess.check_call(host_fakeroot_command(
-        chroot, ['ln', '-s', target, f'{chroot}/{ldconfig}']))
+    with open(dpkg_config_path, "w") as fp:
+        fp.write(f"path-exclude={ldconfig}\n")
+    subprocess.check_call(
+        host_fakeroot_command(
+            chroot, ["mv", f"{chroot}/{ldconfig}", f"{chroot}/{ldconfig_real}"]
+        )
+    )
+    target = os.path.relpath("/bin/true", os.path.dirname(ldconfig))
+    subprocess.check_call(
+        host_fakeroot_command(chroot, ["ln", "-s", target, f"{chroot}/{ldconfig}"])
+    )
 
 
 def allow_host_paths_in_chroot(chroot, **kwargs):
@@ -166,10 +185,9 @@ def allow_host_paths_in_chroot(chroot, **kwargs):
     # But a more pragmatic approach is to create a symlink, which would
     # redirect such accesses back to a chroot. Using a relative path as a
     # target makes such symlinks work both inside and outside of a chroot.
-    dst = f'{chroot}/{chroot}'
+    dst = f"{chroot}/{chroot}"
     src = os.path.relpath(chroot, os.path.dirname(dst))
-    subprocess.check_call(host_fakeroot_command(
-        chroot, ['ln', '-s', src, dst]))
+    subprocess.check_call(host_fakeroot_command(chroot, ["ln", "-s", src, dst]))
 
 
 def relativize_symlinks(chroot, **kwargs):
@@ -177,7 +195,7 @@ def relativize_symlinks(chroot, **kwargs):
     # Sometimes qemu-user resolves them relative to $QEMU_LD_PREFIX, sometimes
     # (most notably, for .interp) it just uses the target as a host path.
     # Relativize all symlinks in order to make life easier.
-    script = '''import os
+    script = """import os
 import sys
 
 symlink, = sys.argv[1:]
@@ -185,26 +203,43 @@ target = os.readlink(symlink)
 root = '../' * (sum(1 for c in symlink if c == '/') - 1)
 os.unlink(symlink)
 os.symlink(root + target[1:], symlink)
-'''
-    subprocess.check_call(host_fakeroot_command(chroot, [
-        'find',
-        '.',
-        '-lname', '/*',
-        '-exec', 'python3', '-c', script, '{}', ';',
-    ]), cwd=chroot)
+"""
+    subprocess.check_call(
+        host_fakeroot_command(
+            chroot,
+            [
+                "find",
+                ".",
+                "-lname",
+                "/*",
+                "-exec",
+                "python3",
+                "-c",
+                script,
+                "{}",
+                ";",
+            ],
+        ),
+        cwd=chroot,
+    )
 
 
 def touch_ld_so_cache(chroot, **kwargs):
     # If there is no /etc/ld.so.cache in a debootstrap chroot, ld.so might try
     # to access the host one, with catastrophic consequences.
-    subprocess.check_call(host_fakeroot_command(chroot, [
-        'touch',
-        f'{chroot}/etc/ld.so.cache',
-    ]))
+    subprocess.check_call(
+        host_fakeroot_command(
+            chroot,
+            [
+                "touch",
+                f"{chroot}/etc/ld.so.cache",
+            ],
+        )
+    )
 
 
 def debootstrap2(chroot, **kwargs):
-    run_in_chroot(chroot, ['/debootstrap/debootstrap', '--second-stage'])
+    run_in_chroot(chroot, ["/debootstrap/debootstrap", "--second-stage"])
 
 
 def fixup_fakechroot_again(chroot, **kwargs):
@@ -216,12 +251,19 @@ def relativize_symlinks_again(chroot, **kwargs):
 
 
 def archive_chroot(chroot, arch, suite, cache_dir, **kwargs):
-    subprocess.check_call(host_fakeroot_command(chroot, [
-        'tar',
-        '-C', chroot,
-        '-czf', get_chroot_path(cache_dir, arch, suite),
-        '.',
-    ]))
+    subprocess.check_call(
+        host_fakeroot_command(
+            chroot,
+            [
+                "tar",
+                "-C",
+                chroot,
+                "-czf",
+                get_chroot_path(cache_dir, arch, suite),
+                ".",
+            ],
+        )
+    )
 
 
 CHROOT_SEQUENCE = (
@@ -243,19 +285,24 @@ CHROOT_SEQUENCE = (
 
 
 def extract_chroot(chroot, arch, suite, cache_dir, **kwargs):
-    subprocess.check_call([
-        'fakeroot',
-        '-s', os.path.join(chroot, 'fakeroot-state'),
-        'tar',
-        '-C', chroot,
-        '-xzf', get_chroot_path(cache_dir, arch, suite),
-    ])
+    subprocess.check_call(
+        [
+            "fakeroot",
+            "-s",
+            os.path.join(chroot, "fakeroot-state"),
+            "tar",
+            "-C",
+            chroot,
+            "-xzf",
+            get_chroot_path(cache_dir, arch, suite),
+        ]
+    )
 
 
 def extract_input_initramfs_fp(chroot, fp):
-    orig = os.path.join(chroot, 'orig')
+    orig = os.path.join(chroot, "orig")
     os.makedirs(orig, exist_ok=True)
-    args = host_fakeroot_command(chroot, ['cpio', '-idv'])
+    args = host_fakeroot_command(chroot, ["cpio", "-idv"])
     p = subprocess.Popen(args, stdin=subprocess.PIPE, cwd=orig)
     shutil.copyfileobj(fp, p.stdin)
     p.stdin.flush()
@@ -265,16 +312,27 @@ def extract_input_initramfs_fp(chroot, fp):
 
 
 def extract_input_img(chroot, path):
-    orig = os.path.join(chroot, 'orig')
+    orig = os.path.join(chroot, "orig")
     os.makedirs(orig, exist_ok=True)
-    tar_args = host_fakeroot_command(chroot, ['tar', '-x'])
+    tar_args = host_fakeroot_command(chroot, ["tar", "-x"])
     tar = subprocess.Popen(tar_args, stdin=subprocess.PIPE, cwd=orig)
-    subprocess.check_call([
-        'guestfish', '-a', path,
-        'launch', ':',
-        'mount', '/dev/sda', '/', ':',
-        'tar-out', '/', '-',
-    ], stdout=tar.stdin)
+    subprocess.check_call(
+        [
+            "guestfish",
+            "-a",
+            path,
+            "launch",
+            ":",
+            "mount",
+            "/dev/sda",
+            "/",
+            ":",
+            "tar-out",
+            "/",
+            "-",
+        ],
+        stdout=tar.stdin,
+    )
     retcode = tar.wait()
     if retcode != 0:
         raise subprocess.CalledProcessError(retcode, tar_args)
@@ -283,59 +341,78 @@ def extract_input_img(chroot, path):
 def extract_input_initramfs(chroot, input_initramfs, **kwargs):
     if input_initramfs is None:
         return
-    with open(input_initramfs, 'rb') as fp:
+    with open(input_initramfs, "rb") as fp:
         magic = fp.read(6)
         fp.seek(0)
-        if magic[:2] == b'\037\213':
+        if magic[:2] == b"\037\213":
             with gzip.open(fp) as gzfp:
                 extract_input_initramfs_fp(chroot, gzfp)
             return
-        if magic == b'070701':
+        if magic == b"070701":
             extract_input_initramfs_fp(chroot, fp)
             return
         fp.seek(0x438)
         ext2_magic = fp.read(2)
         fp.seek(0)
-        if ext2_magic == b'\x53\xef':
+        if ext2_magic == b"\x53\xef":
             extract_input_img(chroot, input_initramfs)
             return
-    raise Exception(f'{input_initramfs} has an unsupported format')
+    raise Exception(f"{input_initramfs} has an unsupported format")
 
 
 def configure_init(chroot, arch, **kwargs):
-    console = DEB2CONSOLE.get(arch, '/dev/console')
-    with tempfile.NamedTemporaryFile('w+') as fp:
-        fp.write(f'''#!/bin/sh
+    console = DEB2CONSOLE.get(arch, "/dev/console")
+    with tempfile.NamedTemporaryFile("w+") as fp:
+        fp.write(
+            f"""#!/bin/sh
 mount -t devtmpfs devtmpfs /dev
 mount -t proc proc /proc
 mount -t sysfs sysfs /sys
 stty -F {console} sane
 exec setsid sh -c 'exec /bin/bash <>{console} 2>&1'
-''')
+"""
+        )
         fp.flush()
         fp.seek(0)
-        subprocess.check_call(host_fakeroot_command(chroot, [
-            'sh', '-c', 'cat >init && chmod 755 init',
-        ]), stdin=fp, cwd=chroot)
+        subprocess.check_call(
+            host_fakeroot_command(
+                chroot,
+                [
+                    "sh",
+                    "-c",
+                    "cat >init && chmod 755 init",
+                ],
+            ),
+            stdin=fp,
+            cwd=chroot,
+        )
 
 
 def configure_root(chroot, **kwargs):
-    shadow = os.path.join(chroot, 'etc', 'shadow')
-    subprocess.check_call(host_fakeroot_command(chroot, [
-        'sed', '-i', r's/root:\*:/root::/', shadow,
-    ]))
+    shadow = os.path.join(chroot, "etc", "shadow")
+    subprocess.check_call(
+        host_fakeroot_command(
+            chroot,
+            [
+                "sed",
+                "-i",
+                r"s/root:\*:/root::/",
+                shadow,
+            ],
+        )
+    )
 
 
 def configure_hostname(chroot, **kwargs):
-    with open(os.path.join(chroot, 'etc', 'hostname'), 'w') as fp:
-        fp.write('initramfs-wrap\n')
+    with open(os.path.join(chroot, "etc", "hostname"), "w") as fp:
+        fp.write("initramfs-wrap\n")
 
 
 def add_extra_files(chroot, extra_files, **kwargs):
     if extra_files is not None:
         for spec in extra_files:
-            src, dst = spec.split(':')
-            real_dst = f'{chroot}{dst}'
+            src, dst = spec.split(":")
+            real_dst = f"{chroot}{dst}"
             shutil.copyfile(src, real_dst)
             st = os.stat(src)
             os.chmod(real_dst, st.st_mode)
@@ -343,167 +420,201 @@ def add_extra_files(chroot, extra_files, **kwargs):
 
 def make_exclude_expr(arch, exclude):
     exclude_paths = [
-        './fakeroot-state',
+        "./fakeroot-state",
     ]
     qemu_path = get_binfmt_misc_interpreter(arch)
     if qemu_path is not None:
-        exclude_paths.append(f'.{qemu_path}')
+        exclude_paths.append(f".{qemu_path}")
     if exclude is not None:
         exclude_paths.extend(exclude)
-    return ' '.join(
-        f'! -path \'{exclude_path}\''
-        for exclude_path in exclude_paths)
+    return " ".join(f"! -path '{exclude_path}'" for exclude_path in exclude_paths)
 
 
 def archive_output_img(path, exclude_expr):
     img_size = 2 * 1024 * 1024 * 1024
-    img_fs = 'ext2'
-    with open(path, 'wb') as fp:
+    img_fs = "ext2"
+    with open(path, "wb") as fp:
         fp.truncate(img_size)
-    tar_args = host_fakeroot_command(chroot, [
-        'sh', '-c', f'find . {exclude_expr} | tar -T - -c',
-    ])
+    tar_args = host_fakeroot_command(
+        chroot,
+        [
+            "sh",
+            "-c",
+            f"find . {exclude_expr} | tar -T - -c",
+        ],
+    )
     tar = subprocess.Popen(tar_args, stdout=subprocess.PIPE, cwd=chroot)
-    subprocess.check_call([
-        'guestfish', '-a', path,
-        'launch', ':',
-        'part-disk', '/dev/sda', 'gpt', ':',
-        'mkfs', img_fs, '/dev/sda1', ':',
-        'mount', '/dev/sda1', '/', ':',
-        'tar-in', '-', '/',
-    ], stdin=tar.stdout)
+    subprocess.check_call(
+        [
+            "guestfish",
+            "-a",
+            path,
+            "launch",
+            ":",
+            "part-disk",
+            "/dev/sda",
+            "gpt",
+            ":",
+            "mkfs",
+            img_fs,
+            "/dev/sda1",
+            ":",
+            "mount",
+            "/dev/sda1",
+            "/",
+            ":",
+            "tar-in",
+            "-",
+            "/",
+        ],
+        stdin=tar.stdout,
+    )
     retcode = tar.wait()
     if retcode != 0:
         raise subprocess.CalledProcessError(retcode, tar_args)
 
 
 def remove_valgrind_tools(chroot, arch, **kwargs):
-    path = f'/usr/lib/{DEB2GNU.get(arch, arch)}-linux-gnu/valgrind'
+    path = f"/usr/lib/{DEB2GNU.get(arch, arch)}-linux-gnu/valgrind"
     tool_patterns = [
-        f'{path}/{name}-*-linux'
+        f"{path}/{name}-*-linux"
         for name in (
-            'helgrind',
-            'callgrind',
-            'drd',
-            'massif',
-            'exp-sgcheck',
-            'cachegrind',
-            'exp-dhat',
-            'lackey',
-            'exp-bbv',
-            'none',
+            "helgrind",
+            "callgrind",
+            "drd",
+            "massif",
+            "exp-sgcheck",
+            "cachegrind",
+            "exp-dhat",
+            "lackey",
+            "exp-bbv",
+            "none",
         )
     ]
-    run_in_chroot(chroot, [
-        'bash',
-        '-O', 'nullglob',
-        '-c', 'rm -f ' + ' '.join(tool_patterns),
-    ])
+    run_in_chroot(
+        chroot,
+        [
+            "bash",
+            "-O",
+            "nullglob",
+            "-c",
+            "rm -f " + " ".join(tool_patterns),
+        ],
+    )
 
 
 def remove_python_codecs(chroot, arch, **kwargs):
     gnu_arch = DEB2GNU.get(arch, arch)
-    dynload = '/usr/lib/python3.7/lib-dynload'
-    codec_glob = f'_codecs_*.cpython-37m-{gnu_arch}-linux-gnu.so'
-    run_in_chroot(chroot, [
-        'bash',
-        '-O', 'nullglob',
-        '-c', f'rm -f {dynload}/{codec_glob}'
-    ])
+    dynload = "/usr/lib/python3.7/lib-dynload"
+    codec_glob = f"_codecs_*.cpython-37m-{gnu_arch}-linux-gnu.so"
+    run_in_chroot(
+        chroot, ["bash", "-O", "nullglob", "-c", f"rm -f {dynload}/{codec_glob}"]
+    )
 
 
 def remove_packages(chroot, **kwargs):
     """Remove packages that cannot be excluded"""
     packages = [
-        'e2fsprogs',
-        'libext2fs2',
-        'libss2',
+        "e2fsprogs",
+        "libext2fs2",
+        "libss2",
     ]
-    run_in_chroot(chroot, ['dpkg', '--purge'] + packages)
+    run_in_chroot(chroot, ["dpkg", "--purge"] + packages)
 
 
 def remove_apt(chroot, **kwargs):
     packages = [
-        'adduser',
-        'apt',
-        'debian-archive-keyring',
-        'gpgv',
-        'libapt-pkg5.0',
-        'libapt-pkg6.0',
-        'libgmp10',
-        'libgnutls30',
-        'libhogweed4',
-        'libhogweed5',
-        'libidn2-0',
-        'libnettle6',
-        'libp11-kit0',
-        'libsemanage1',
-        'libsepol1',
-        'libunistring2',
-        'libzstd1',
-        'passwd',
+        "adduser",
+        "apt",
+        "debian-archive-keyring",
+        "gpgv",
+        "libapt-pkg5.0",
+        "libapt-pkg6.0",
+        "libgmp10",
+        "libgnutls30",
+        "libhogweed4",
+        "libhogweed5",
+        "libidn2-0",
+        "libnettle6",
+        "libp11-kit0",
+        "libsemanage1",
+        "libsepol1",
+        "libunistring2",
+        "libzstd1",
+        "passwd",
     ]
     directories = [
-        '/etc/apt',
+        "/etc/apt",
     ]
-    run_in_chroot(chroot, ['dpkg', '--purge'] + packages)
-    run_in_chroot(chroot, ['rm', '-r'] + directories)
+    run_in_chroot(chroot, ["dpkg", "--purge"] + packages)
+    run_in_chroot(chroot, ["rm", "-r"] + directories)
 
 
 def remove_force(chroot, **kwargs):
     """Remove packages that have dependents"""
     packages = [
-        'fdisk',
-        'libdb5.3',
-        'libfdisk1',
-        'libsqlite3-0',
+        "fdisk",
+        "libdb5.3",
+        "libfdisk1",
+        "libsqlite3-0",
     ]
-    run_in_chroot(chroot, [
-        'dpkg',
-        '--purge',
-        '--force-depends',
-    ] + packages)
+    run_in_chroot(
+        chroot,
+        [
+            "dpkg",
+            "--purge",
+            "--force-depends",
+        ]
+        + packages,
+    )
 
 
 def remove_dpkg(chroot, **kwargs):
     packages = [
-        'debconf',
-        'dpkg',
+        "debconf",
+        "dpkg",
     ]
     directories = [
-        '/etc/dpkg',
-        '/var/cache/debconf',
-        '/var/lib/dpkg',
+        "/etc/dpkg",
+        "/var/cache/debconf",
+        "/var/lib/dpkg",
     ]
-    run_in_chroot(chroot, [
-        'dpkg',
-        '--purge',
-        '--force-remove-essential',
-        '--force-depends',
-    ] + packages)
-    run_in_chroot(chroot, ['rm', '-r'] + directories)
+    run_in_chroot(
+        chroot,
+        [
+            "dpkg",
+            "--purge",
+            "--force-remove-essential",
+            "--force-depends",
+        ]
+        + packages,
+    )
+    run_in_chroot(chroot, ["rm", "-r"] + directories)
 
 
 def unfake_ldconfig(chroot, **kwargs):
     ldconfig, ldconfig_real, dpkg_config_path = ldconfig_paths(chroot)
     # dpkg_config_path is already removed by remove_dpkg
-    run_in_chroot(chroot, ['mv', ldconfig_real, ldconfig])
+    run_in_chroot(chroot, ["mv", ldconfig_real, ldconfig])
 
 
-def archive_output_initramfs(
-        chroot, arch, output_initramfs, exclude, **kwargs):
+def archive_output_initramfs(chroot, arch, output_initramfs, exclude, **kwargs):
     exclude_expr = make_exclude_expr(arch, exclude)
-    if output_initramfs.endswith('.raw'):
+    if output_initramfs.endswith(".raw"):
         return archive_output_img(output_initramfs, exclude_expr)
-    args = host_fakeroot_command(chroot, [
-        'sh', '-c', f'find . {exclude_expr} | cpio -o -H newc',
-    ])
-    p = subprocess.Popen(
-        args, stdout=subprocess.PIPE, cwd=chroot)
-    if output_initramfs.endswith('.gz'):
-        fp = gzip.open(output_initramfs, 'wb', 6)
+    args = host_fakeroot_command(
+        chroot,
+        [
+            "sh",
+            "-c",
+            f"find . {exclude_expr} | cpio -o -H newc",
+        ],
+    )
+    p = subprocess.Popen(args, stdout=subprocess.PIPE, cwd=chroot)
+    if output_initramfs.endswith(".gz"):
+        fp = gzip.open(output_initramfs, "wb", 6)
     else:
-        fp = open(output_initramfs, 'wb')
+        fp = open(output_initramfs, "wb")
     with fp:
         shutil.copyfileobj(p.stdout, fp)
     retcode = p.wait()
@@ -533,46 +644,44 @@ def is_in_sequence(args_s, sequence):
     return args_s in (step.__name__ for step in sequence)
 
 
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser(
-        description='Add debugging tools to initramfs')
-    parser.add_argument('-a', required=True, help='Architecture')
-    parser.add_argument('-c', help='Reuse an existing chroot')
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Add debugging tools to initramfs")
+    parser.add_argument("-a", required=True, help="Architecture")
+    parser.add_argument("-c", help="Reuse an existing chroot")
+    parser.add_argument("-d", action="append", help="Extra files to package (SRC:DST)")
+    parser.add_argument("-f", action="store_true", help="Ignore cached chroot")
+    parser.add_argument("-i", help="Input initramfs")
+    parser.add_argument("-k", action="store_true", help="Keep intermediate chroot")
+    parser.add_argument("-o", required=True, help="Output initramfs")
     parser.add_argument(
-        '-d', action='append', help='Extra files to package (SRC:DST)')
-    parser.add_argument('-f', action='store_true', help='Ignore cached chroot')
-    parser.add_argument('-i', help='Input initramfs')
-    parser.add_argument(
-        '-k', action='store_true', help='Keep intermediate chroot')
-    parser.add_argument('-o', required=True, help='Output initramfs')
-    parser.add_argument(
-        '--cache-dir',
-        help='Cache directory',
+        "--cache-dir",
+        help="Cache directory",
         default=default_cache_dir(),
     )
-    parser.add_argument('-s', help='Step to execute')
-    parser.add_argument('-u', help='Suite', default='buster')
-    parser.add_argument('-v', action='store_true', help='Verbose output')
-    parser.add_argument('-x', action='append', help='Extra paths to exclude')
+    parser.add_argument("-s", help="Step to execute")
+    parser.add_argument("-u", help="Suite", default="buster")
+    parser.add_argument("-v", action="store_true", help="Verbose output")
+    parser.add_argument("-x", action="append", help="Extra paths to exclude")
     args = parser.parse_args()
     if args.v:
         logging.basicConfig(level=logging.DEBUG)
     else:
         logging.basicConfig(level=logging.INFO)
     if args.c is None:
-        chroot = tempfile.mkdtemp(prefix=f'debootstrap-{args.a}-')
-        logging.info('[*] Created %s', chroot)
+        chroot = tempfile.mkdtemp(prefix=f"debootstrap-{args.a}-")
+        logging.info("[*] Created %s", chroot)
     else:
         chroot = args.c
-        logging.info('[*] Reusing %s', chroot)
+        logging.info("[*] Reusing %s", chroot)
     try:
-        if (args.f or
-                is_in_sequence(args.s, CHROOT_SEQUENCE) or
-                not os.path.exists(get_chroot_path(
-                    args.cache_dir, args.a, args.u))):
+        if (
+            args.f
+            or is_in_sequence(args.s, CHROOT_SEQUENCE)
+            or not os.path.exists(get_chroot_path(args.cache_dir, args.a, args.u))
+        ):
             for chroot_step in CHROOT_SEQUENCE:
                 if args.s is None or args.s == chroot_step.__name__:
-                    logging.info('[*] %s', chroot_step.__name__)
+                    logging.info("[*] %s", chroot_step.__name__)
                     chroot_step(
                         chroot=chroot,
                         arch=args.a,
@@ -581,7 +690,7 @@ if __name__ == '__main__':
                     )
         for initramfs_step in INITRAMFS_SEQUENCE:
             if args.s is None or args.s == initramfs_step.__name__:
-                logging.info('[*] %s', initramfs_step.__name__)
+                logging.info("[*] %s", initramfs_step.__name__)
                 initramfs_step(
                     chroot=chroot,
                     arch=args.a,
@@ -594,7 +703,7 @@ if __name__ == '__main__':
                 )
     finally:
         if args.c is None and not args.k:
-            logging.info('[*] Deleting %s', chroot)
+            logging.info("[*] Deleting %s", chroot)
             shutil.rmtree(chroot)
         else:
-            logging.info('[*] Keeping %s', chroot)
+            logging.info("[*] Keeping %s", chroot)
